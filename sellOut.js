@@ -86,7 +86,7 @@ const init = async () => {
         const bal = await friends.sharesBalance(friendAddress, wallet.address);
         const sellPrice = await friends.getSellPrice(friendAddress, 1);
         
-        if(bal > 0) await sellSharesForFriend(friendAddress);
+        await sellSharesForFriend(friendAddress);
         
     }
 }
