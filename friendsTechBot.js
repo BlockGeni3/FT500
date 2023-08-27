@@ -25,7 +25,7 @@ async function fetchGasPrice() {
   if (Date.now() - lastGasFetch > 5 * 60 * 1000) { // Fetch every 5 minutes
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
-      cachedGasPrice = parseInt(feeData.maxFeePerGas);
+      cachedGasPrice = (parseInt(feeData.maxFeePerGas) * 200) / 100;
       lastGasFetch = Date.now();
     } else {
       console.error('Unable to get fee data or maxFeePerGas.');

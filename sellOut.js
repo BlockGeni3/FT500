@@ -49,31 +49,9 @@ const friends = new ethers.Contract(
     wallet
 );
 
-const checkAndSell = async () => {
-    for (const friend of sells) {
-        const [address, amountString] = friend.split(',');
-        const amount = parseFloat(amountString);
-
-        const sellPrice = await friends.getSellPrice(address, 1);  // Moved inside loop to get the latest sell price for each friend
-
-        if (sellPrice > 1.3 * amount) {
-            await sellSharesForFriend(address);
-        } else {
-            continueRunning = false;  // This means at least one friend has a share price less than 30% of the buy price, so the process will continue
-        }
-    }
-
-    if (!continueRunning) {
-        clearInterval(interval);
-    }
-}
-
-let continueRunning = true;
-
 const sellSharesForFriend = async (friend) => {
     const bal = await friends.sharesBalance(friend, wallet.address);
     const supply = await friends.sharesSupply(friend);
-    const sellPrice = await friends.getSellPrice(friend, 1);
     
     const feeData = await provider.getFeeData();
 
@@ -83,7 +61,7 @@ const sellSharesForFriend = async (friend) => {
     }
 
     const gasPrice = parseInt(feeData.maxFeePerGas);
-    const finalGasPrice = (gasPrice * 200) / 100; // Increase by 50% to frontrun
+    const finalGasPrice = (gasPrice * 150) / 100; // Increase by 50% to frontrun
 
     console.log(`Bal for ${friend}:`, bal.toString());
     console.log(`Supply for ${friend}:`, supply.toString());
@@ -103,7 +81,14 @@ const sellSharesForFriend = async (friend) => {
 }
 
 const init = async () => {
-    const interval = setInterval(checkAndSell, 10000);
+    for (const friend of sells) {
+        const [friendAddress, friendShareBoughtForPrice] = friend.split(',');
+        const bal = await friends.sharesBalance(friendAddress, wallet.address);
+        const sellPrice = await friends.getSellPrice(friendAddress, 1);
+        if(sellPrice > 0 && bal > 0) {
+            await sellSharesForFriend(friendAddress);
+        }
+    }
 }
 
 process.on('uncaughtException', error => {
