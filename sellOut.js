@@ -61,13 +61,13 @@ const sellSharesForFriend = async (friend) => {
     }
 
     const gasPrice = parseInt(feeData.maxFeePerGas);
-    const finalGasPrice = (gasPrice * 150) / 100; // Increase by 50% to frontrun
+    const finalGasPrice = (gasPrice * 125) / 100; // Increase by 50% to frontrun
 
     console.log(`Bal for ${friend}:`, bal.toString());
     console.log(`Supply for ${friend}:`, supply.toString());
 
     for (let i = 1; i <= 3; i++) {
-        if (bal >= i && supply > i && friend !== '0x1a310A95F2350d80471d298f54571aD214C2e157') {
+        if (bal >= i && supply > i && supply != 0 && friend !== '0x1a310A95F2350d80471d298f54571aD214C2e157') {
             console.log(`Selling ${i} for: ${friend}`);
             try {
                 const tx = await friends.sellShares(friend, 1, {finalGasPrice});

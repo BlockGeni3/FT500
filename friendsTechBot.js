@@ -11,7 +11,8 @@ const friends = new ethers.Contract(
   [
     'function buyShares(address arg0, uint256 arg1)',
     'function getBuyPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)',
-    'event Trade(address trader, address subject, bool isBuy, uint256 shareAmount, uint256 ethAmount, uint256 protocolEthAmount, uint256 subjectEthAmount, uint256 supply)'
+    'event Trade(address trader, address subject, bool isBuy, uint256 shareAmount, uint256 ethAmount, uint256 protocolEthAmount, uint256 subjectEthAmount, uint256 supply)',
+    'function sharesSupply(address sharesSubject) public view returns (uint256)'
   ],
   account
 );
@@ -48,7 +49,7 @@ function shouldActOnEvent(event, weiBalance) {
 
 async function handleEvent(event) {
   await fetchGasPrice();
-  const finalGasPrice = (cachedGasPrice * 150) / 100; // Increase by 50% to frontrun
+  const finalGasPrice = (cachedGasPrice * 125) / 100; // Increase by 50% to frontrun
   const amigo = event.args[1];
   const weiBalance = await provider.getBalance(amigo);
 
@@ -56,17 +57,22 @@ async function handleEvent(event) {
 
   const qty = determineQty(weiBalance);
   const buyPrice = await friends.getBuyPriceAfterFee(amigo, qty);
+  const supply = await friends.sharesSupply(amigo);
 
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
-  try {
-    const nonce = await provider.getTransactionCount(wallet.address, 'pending');
-    const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
-    fs.writeFileSync('./buys.txt', `${amigo}, ${buyPrice}\n`, {flag: 'a'});
-    const receipt = await tx.wait();
-    console.log('Transaction Mined:', receipt.blockNumber);
-  } catch (error) {
-    console.error('Transaction Failed:', error);
+  if(buyPrice > 0) {
+    try {
+      const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+      const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
+      fs.writeFileSync('./buys.txt', `${amigo}, ${buyPrice}\n`, {flag: 'a'});
+      const receipt = await tx.wait();
+      console.log('Transaction Mined:', receipt.blockNumber);
+    } catch (error) {
+      console.error('Transaction Failed:', error);
+    }
+  } else {
+    console.log(supply, buyPrice);
   }
 }
 
