@@ -60,7 +60,8 @@ async function handleEvent(event) {
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
   try {
-    const tx = await friends.buyShares(amigo, qty, {value: buyPrice, finalGasPrice});
+    const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+    const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
     fs.writeFileSync('./buys.txt', `${amigo}, ${buyPrice}\n`, {flag: 'a'});
     const receipt = await tx.wait();
     console.log('Transaction Mined:', receipt.blockNumber);
