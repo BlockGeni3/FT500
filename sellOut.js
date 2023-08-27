@@ -1,5 +1,21 @@
 const ethers = require('ethers');
+const fs = require('fs');
 require("dotenv").config();
+
+/**
+ * Convert a txt document to an array where each line is an element in the array
+ * @param {string} filePath - Path to the .txt file
+ * @return {Promise<string[]>} Array of lines from the document
+ */
+async function txtToArray(filePath) {
+    try {
+        const data = await fs.promises.readFile(filePath, 'utf8');
+        return data.split('\n').filter(Boolean); // Filter out any empty lines
+    } catch (error) {
+        console.error('Error reading the file:', error);
+        throw error;
+    }
+}
 
 /*
     Trading Bot to sell all known shares
@@ -8,32 +24,75 @@ require("dotenv").config();
     3 positions. Does this as individual txs
     because of the way Friend.tech calcs prices
 */
+let sells = [];
 
-const sells = [];
+txtToArray('./buys.txt').then(arr => {
+    console.log(arr);
+    sells = arr;
+
+    init();
+}).catch(error => {
+    console.error('Error:', error);
+});
 
 const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
-const provider = new ethers.JsonRpcProvider(`https://mainnet.base.org`);
+const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
-const gasPrice = ethers.parseUnits('0.000000000000049431', 'ether');
 const friends = new ethers.Contract(
     friendsAddress,
     [
         'function sellShares(address sharesSubject, uint256 amount) public payable',
         'function sharesBalance(address sharesSubject, address holder) public view returns (uint256)',
         'function sharesSupply(address sharesSubject) public view returns (uint256)',
+        'function getSellPrice(address sharesSubject, uint256 amount) public view returns (uint256)'
     ],
     wallet
 );
 
+const checkAndSell = async () => {
+    for (const friend of sells) {
+        const [address, amountString] = friend.split(',');
+        const amount = parseFloat(amountString);
+
+        const sellPrice = await friends.getSellPrice(address, 1);  // Moved inside loop to get the latest sell price for each friend
+
+        if (sellPrice > 1.3 * amount) {
+            await sellSharesForFriend(address);
+        } else {
+            continueRunning = false;  // This means at least one friend has a share price less than 30% of the buy price, so the process will continue
+        }
+    }
+
+    if (!continueRunning) {
+        clearInterval(interval);
+    }
+}
+
+let continueRunning = true;
+
 const sellSharesForFriend = async (friend) => {
     const bal = await friends.sharesBalance(friend, wallet.address);
     const supply = await friends.sharesSupply(friend);
+    const sellPrice = await friends.getSellPrice(friend, 1);
+    
+    const feeData = await provider.getFeeData();
+
+    if (!feeData || !feeData.maxFeePerGas) {
+        console.error('Unable to get fee data or maxFeePerGas.');
+        return;
+    }
+
+    const gasPrice = parseInt(feeData.maxFeePerGas);
+    const finalGasPrice = (gasPrice * 200) / 100; // Increase by 50% to frontrun
+
+    console.log(`Bal for ${friend}:`, bal.toString());
+    console.log(`Supply for ${friend}:`, supply.toString());
 
     for (let i = 1; i <= 3; i++) {
         if (bal >= i && supply > i && friend !== '0x1a310A95F2350d80471d298f54571aD214C2e157') {
             console.log(`Selling ${i} for: ${friend}`);
             try {
-                const tx = await friends.sellShares(friend, 1, {gasPrice});
+                const tx = await friends.sellShares(friend, 1, {finalGasPrice});
                 const receipt = await tx.wait();
                 console.log(`Transaction ${i} Mined for ${friend}:`, receipt.blockNumber);
             } catch (error) {
@@ -44,12 +103,8 @@ const sellSharesForFriend = async (friend) => {
 }
 
 const init = async () => {
-    for (const friend of sells) {
-        await sellSharesForFriend(friend);
-    }
+    const interval = setInterval(checkAndSell, 10000);
 }
-
-init();
 
 process.on('uncaughtException', error => {
     console.error('Uncaught Exception:', error);
