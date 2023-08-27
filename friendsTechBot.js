@@ -48,7 +48,7 @@ function shouldActOnEvent(event, weiBalance) {
 
 async function handleEvent(event) {
   await fetchGasPrice();
-  const finalGasPrice = (cachedGasPrice * 200) / 100; // Increase by 50% to frontrun
+  const finalGasPrice = (cachedGasPrice * 150) / 100; // Increase by 50% to frontrun
   const amigo = event.args[1];
   const weiBalance = await provider.getBalance(amigo);
 
