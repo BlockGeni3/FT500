@@ -1,7 +1,6 @@
 const ethers = require('ethers');
 const fs = require('fs');
 const { promisify } = require('util');
-const appendFile = promisify(fs.appendFile);
 require("dotenv").config();
 
 const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
@@ -46,7 +45,7 @@ function shouldActOnEvent(event, weiBalance) {
   // if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
   if (weiBalance <= 5000000000000000) {
     const ethBalance = (Number(weiBalance) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-    console.log(`No Money No Honey: `, amigo, ethBalance);
+    console.log(`They broke as hell dawg: `, amigo, ethBalance);
   }
   // Store the last 20 balances
   balanceSet.add(weiBalance);
@@ -57,12 +56,12 @@ function shouldActOnEvent(event, weiBalance) {
 
 async function handleEvent(event) {
   await fetchGasPrice();
-  const finalGasPrice = (cachedGasPrice * 125) / 100; // Increase by 50% to frontrun
   const amigo = event.args[1];
   const weiBalance = await provider.getBalance(amigo);
-  const [currentBalance, nonce] = await Promise.all([
+  const [currentBalance, nonce, supply] = await Promise.all([
     provider.getBalance(wallet.address), 
-    provider.getTransactionCount(wallet.address, 'pending')
+    provider.getTransactionCount(wallet.address, 'pending'),
+    friends.sharesSupply(amigo)
   ]);
 
   if (!shouldActOnEvent(event, weiBalance)) return;
@@ -72,22 +71,26 @@ async function handleEvent(event) {
 
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
-  if(currentBalance < startBalance && currentBalance <= limitBalance) {
+  if(currentBalance < startBalance && currentBalance <= startBalance / 2) {
     console.log('Balance hit half way point shutting down');
     process.exit();
-  } 
+  }
+  
+  if(supply === 0) {
+    console.log('Skipped buying as supply is 0.');
+    return;
+  }
   
   // Add this condition to check if the buyPrice is less than the gas fee
-  if (buyPrice < finalGasPrice) {
+  if (buyPrice < cachedGasPrice) {
     console.log('Skipped buying shares as they cost less than the gas fee.');
     return;
   }
 
   if(buyPrice > 0) {
     try {
-      const nonce = await provider.getTransactionCount(wallet.address, 'pending');
-      const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
-      fs.writeFileSync('./buys.txt', `${amigo}, ${buyPrice}\n`, {flag: 'a'});
+      const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: cachedGasPrice, nonce: nonce});
+      fs.writeFileSync('./buys.txt', `\n`+`${amigo}, ${buyPrice}` + `\n`, {flag: 'a'});
       const ethBuy = (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
       console.log('### BUY ###', amigo, ethBuy);
       const receipt = await tx.wait();
