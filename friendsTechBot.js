@@ -75,6 +75,12 @@ async function handleEvent(event) {
   if(currentBalance < startBalance && currentBalance <= limitBalance) {
     console.log('Balance hit half way point shutting down');
     process.exit();
+  } 
+  
+  // Add this condition to check if the buyPrice is less than the gas fee
+  if (buyPrice < finalGasPrice) {
+    console.log('Skipped buying shares as they cost less than the gas fee.');
+    return;
   }
 
   if(buyPrice > 0) {

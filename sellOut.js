@@ -2,28 +2,16 @@ const ethers = require('ethers');
 const fs = require('fs');
 require("dotenv").config();
 
-/**
- * Convert a txt document to an array where each line is an element in the array
- * @param {string} filePath - Path to the .txt file
- * @return {Promise<string[]>} Array of lines from the document
- */
 async function txtToArray(filePath) {
     try {
         const data = await fs.promises.readFile(filePath, 'utf8');
-        return data.split('\n').filter(Boolean); // Filter out any empty lines
+        return data.split('\n').filter(Boolean);
     } catch (error) {
         console.error('Error reading the file:', error);
         throw error;
     }
 }
 
-/*
-    Trading Bot to sell all known shares
-    Provide a list of user addresses in the
-    sells array and it will sell out of up to
-    3 positions. Does this as individual txs
-    because of the way Friend.tech calcs prices
-*/
 let sells = [];
 
 txtToArray('./buys.txt').then(arr => {
@@ -61,7 +49,7 @@ const sellSharesForFriend = async (friend) => {
     }
 
     const gasPrice = parseInt(feeData.maxFeePerGas);
-    const finalGasPrice = (gasPrice * 125) / 100; // Increase by 50% to frontrun
+    const finalGasPrice = (gasPrice * 125) / 100;
 
     console.log(`Bal for ${friend}:`, bal.toString());
     console.log(`Supply for ${friend}:`, supply.toString());
@@ -78,17 +66,29 @@ const sellSharesForFriend = async (friend) => {
             }
         }
     }
+    const newBal = await friends.sharesBalance(friend, wallet.address);
+    return newBal;
 }
 
 const init = async () => {
+    let updatedSells = [];
     for (const friend of sells) {
-        const [friendAddress, friendShareBoughtForPrice] = friend.split(',');
-        const bal = await friends.sharesBalance(friendAddress, wallet.address);
+        const [friendAddress, friendShareBoughtForPrice] = friend.split(',').map(e => e.trim());
         const sellPrice = await friends.getSellPrice(friendAddress, 1);
-        
-        await sellSharesForFriend(friendAddress);
-        
+        const bal = await friends.sharesBalance(friendAddress, wallet.address);
+
+        if(Number(bal) === 0) {
+            console.log(`You don't own share ${friendAddress}`);
+        } else {
+            const newBal = await sellSharesForFriend(friendAddress);
+            console.log(`Shares sold for ${sellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
+            if (Number(newBal) > 0) {
+                updatedSells.push(friend);
+            }
+        }
     }
+    sells = updatedSells;
+    fs.promises.writeFile('./buys.txt', sells.join('\n'), 'utf8');
 }
 
 process.on('uncaughtException', error => {
