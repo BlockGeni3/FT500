@@ -1,11 +1,14 @@
 const ethers = require('ethers');
 const fs = require('fs');
+const { promisify } = require('util');
+const appendFile = promisify(fs.appendFile);
 require("dotenv").config();
 
 const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
 const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
 const account = wallet.connect(provider);
+const startBalance = provider.getBalance(wallet.address);
 const friends = new ethers.Contract(
   friendsAddress,
   [
@@ -35,11 +38,16 @@ async function fetchGasPrice() {
 }
 
 function shouldActOnEvent(event, weiBalance) {
+  const amigo = event.args[1];
+
   if (event.args[2] !== true) return false;
   if (event.args[7] > 1n && (event.args[7] > 4n || event.args[0] !== event.args[1])) return false;
   if (balanceSet.has(weiBalance)) return false; // using a Set instead of an Array
-  if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
-
+  // if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
+  if (weiBalance <= 5000000000000000) {
+    const ethBalance = (Number(weiBalance) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+    console.log(`No Money No Honey: `, amigo, ethBalance);
+  }
   // Store the last 20 balances
   balanceSet.add(weiBalance);
   if (balanceSet.size > 20) balanceSet.delete([...balanceSet][0]);
@@ -52,27 +60,36 @@ async function handleEvent(event) {
   const finalGasPrice = (cachedGasPrice * 125) / 100; // Increase by 50% to frontrun
   const amigo = event.args[1];
   const weiBalance = await provider.getBalance(amigo);
+  const [currentBalance, nonce] = await Promise.all([
+    provider.getBalance(wallet.address), 
+    provider.getTransactionCount(wallet.address, 'pending')
+  ]);
 
   if (!shouldActOnEvent(event, weiBalance)) return;
 
   const qty = determineQty(weiBalance);
   const buyPrice = await friends.getBuyPriceAfterFee(amigo, qty);
-  const supply = await friends.sharesSupply(amigo);
 
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
+
+  if(currentBalance < startBalance && currentBalance <= limitBalance) {
+    console.log('Balance hit half way point shutting down');
+    process.exit();
+  }
 
   if(buyPrice > 0) {
     try {
       const nonce = await provider.getTransactionCount(wallet.address, 'pending');
       const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
       fs.writeFileSync('./buys.txt', `${amigo}, ${buyPrice}\n`, {flag: 'a'});
+      const ethBuy = (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+      console.log('### BUY ###', amigo, ethBuy);
       const receipt = await tx.wait();
       console.log('Transaction Mined:', receipt.blockNumber);
     } catch (error) {
-      console.error('Transaction Failed:', error);
+      let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+      console.log('Transaction Failed:', outMessage);
     }
-  } else {
-    console.log(supply, buyPrice);
   }
 }
 
@@ -89,8 +106,10 @@ const run = () => {
 
 try {
   run();
-} catch (error) {
-  console.error('ERR:', error);
+} 
+catch (error) {
+  let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+  console.log('Transaction Failed:', outMessage);
 }
 
 process.on('uncaughtException', error => {
