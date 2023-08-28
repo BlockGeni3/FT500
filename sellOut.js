@@ -88,7 +88,7 @@ const init = async () => {
         }
     }
     sells = updatedSells;
-    fs.promises.writeFile('./buys.txt', sells.join('\n'), 'utf8');
+    fs.promises.writeFile('./buys.txt', '\n'+sells.join('\n'), 'utf8');
 }
 
 process.on('uncaughtException', error => {
