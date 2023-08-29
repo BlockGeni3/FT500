@@ -1,8 +1,10 @@
 const ethers = require('ethers');
 const fs = require('fs');
-const { promisify } = require('util');
-const appendFile = promisify(fs.appendFile);
 require("dotenv").config();
+const _ = require('lodash');
+const retry = require('async-retry');
+
+const throttledHandleEvent = _.throttle(handleEvent, 5000);
 
 const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
 const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
@@ -123,8 +125,13 @@ async function handleEvent(event) {
       console.log('Transaction Mined:', receipt.blockNumber);
       console.log("---------------------------");
     } catch (error) {
-      let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
-      console.log('Transaction Failed:', outMessage);
+      if (error.message.includes('Too many')) {
+        console.error('Rate limit hit. Pausing for a moment...');
+        await new Promise(res => setTimeout(res, 10000)); // wait for 10 seconds
+      } else {
+        let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+        console.log('Transaction Failed:', outMessage);
+      }
     }
   }
 }
@@ -136,17 +143,30 @@ function determineQty(weiBalance) {
   return 4;
 }
 
-const run = () => {
-  friends.on(filter, handleEvent);
+const run = async () => {
+  await retry(async () => {
+    // Here we start listening for events. If an error occurs, it'll retry based on the retry configuration.
+    friends.on(filter, throttledHandleEvent);
+  }, {
+    retries: 5,
+    minTimeout: 5000,
+    factor: 2
+  });
 };
 
-try {
-  run();
-} 
-catch (error) {
-  let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
-  console.log('Transaction Failed:', outMessage);
-}
+(async function main() {
+  try {
+    await run();
+  } catch (error) {
+    if (error.message.includes('Too many')) {
+      console.error('Rate limit hit. Pausing for a moment...');
+      await new Promise(res => setTimeout(res, 10000)); // wait for 10 seconds
+    } else {
+      let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+      console.error('Error encountered:', outMessage);
+    }
+  }
+})();
 
 process.on('uncaughtException', error => {
   console.error('Uncaught Exception:', error);
