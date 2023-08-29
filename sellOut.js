@@ -32,7 +32,7 @@ const friends = new ethers.Contract(
         'function sellShares(address sharesSubject, uint256 amount) public payable',
         'function sharesBalance(address sharesSubject, address holder) public view returns (uint256)',
         'function sharesSupply(address sharesSubject) public view returns (uint256)',
-        'function getSellPrice(address sharesSubject, uint256 amount) public view returns (uint256)'
+        'function getSellPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)'
     ],
     wallet
 );
@@ -74,17 +74,21 @@ const init = async () => {
     let updatedSells = [];
     for (const friend of sells) {
         const [friendAddress, friendShareBoughtForPrice] = friend.split(',').map(e => e.trim());
-        const sellPrice = await friends.getSellPrice(friendAddress, 1);
+        const sellPrice = await friends.getSellPriceAfterFee(friendAddress, 1);
         const bal = await friends.sharesBalance(friendAddress, wallet.address);
 
-        if(Number(bal) === 0) {
-            console.log(`You don't own share ${friendAddress}`);
-        } else {
-            const newBal = await sellSharesForFriend(friendAddress);
-            console.log(`Shares sold for ${sellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
-            if (Number(newBal) > 0) {
-                updatedSells.push(friend);
+        if(Number(sellPrice) !== 0) {
+            if(Number(bal) === 0) {
+                console.log(`You don't own share ${friendAddress}`);
+            } else {
+                const newBal = await sellSharesForFriend(friendAddress);
+                console.log(`Shares sold for ${sellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
+                if (Number(newBal) > 0) {
+                    updatedSells.push(friend);
+                }
             }
+        } else {
+            console.log('Skipped selling shares as they cant be sold (0 value).');
         }
     }
     sells = updatedSells;
