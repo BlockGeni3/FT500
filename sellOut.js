@@ -86,7 +86,7 @@ app.listen(port, () => {
         if (bal > 0 && supply > bal && supply != 0 && friend !== '0x1a310A95F2350d80471d298f54571aD214C2e157') {
             console.log(`Selling ${bal} for: ${friend}`);
             try {
-                const tx = await friends.sellShares(friend, bal, { gasPrice: finalGasPrice });
+                const tx = await friends.sellShares(friend, bal, { gasPrice: Number(finalGasPrice) });
                 const receipt = await tx.wait();
                 console.log(`Transaction Mined for ${friend}:`, receipt.blockNumber);
             } catch (error) {
