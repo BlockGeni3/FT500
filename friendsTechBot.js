@@ -172,20 +172,23 @@ app.listen(port, async () => {
 
   async function handleSell(event) {
     const amigo = event.args[1];
-    const bal = await friends.sharesBalance(amigo, wallet.address);
+    const [bal, sellPrice, nonce] = await Promise.all([
+      friends.sharesBalance(amigo, wallet.address),
+      friends.getSellPriceAfterFee(amigo, 1),
+      provider.getTransactionCount(wallet.address, 'pending')
+    ]);
 
     if (bal > 0 && purchasedShares.has(amigo)) {
-        const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
         const buyPrice = buyPricesMap.get(amigo);
  
         setTimeout(async () => {
           if (!buyPrice) return;
 
-          if (Number(sellPrice) > (1.50 * Number(buyPrice) + finalGasPrice)) {
+          if (Number(sellPrice) > 1.50 * Number(buyPrice) && 1.50 * Number(buyPrice) > parseInt(finalGasPrice)) {
               try {
                   const tx = await friends.sellShares(amigo, 1, {
                       gasPrice: parseInt(finalGasPrice),
-                      nonce: await provider.getTransactionCount(wallet.address, 'pending')
+                      nonce: nonce
                   });
                   console.log(`Sold shares of ${amigo} for a profit!`);
               } catch (error) {
@@ -230,7 +233,7 @@ app.listen(port, async () => {
       } else {
         let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
         console.error('Error encountered:', outMessage);
-      }
+      } 
     }
   })();
 
