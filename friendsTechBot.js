@@ -20,16 +20,17 @@ const friends = new ethers.Contract(
   ],
   account
 );
-
 const filter = friends.filters.Trade(null, null, null, null, null, null, null, null);
 let cachedGasPrice = null;
 let lastGasFetch = 0;
+let baseGasPrice = null;
 const balanceSet = new Set();
 
 async function fetchGasPrice() {
   if (Date.now() - lastGasFetch > 1 * 60 * 1000) { // Fetch every 1 minute instead of 5
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
+      baseGasPrice =  feeData.maxFeePerGas;
       cachedGasPrice = (parseInt(feeData.maxFeePerGas) * 200) / 100;
       lastGasFetch = Date.now();
     } else {
@@ -66,12 +67,20 @@ async function handleEvent(event) {
     friends.getSellPriceAfterFee(amigo, 1),
     friends.getBuyPriceAfterFee(amigo, qty)
   ]);
+  
 
   if (!shouldActOnEvent(event, weiBalance)) return;
 
-  await fetchGasPrice(); // Moved this line here to ensure gasPrice is fetched right before transaction
+  await fetchGasPrice(); 
 
-  const finalGasPrice = (cachedGasPrice * 150) / 100;
+  let finalGasPrice = cachedGasPrice;
+
+  // Adjust gas price based on buy price
+  if(buyPrice < baseGasPrice) {
+    finalGasPrice = (cachedGasPrice * 101) / 100;
+  } else {
+    finalGasPrice = (cachedGasPrice * 150) / 100; 
+  }
   
   // Add this condition to explicitly skip if qty is 0
   if (qty === 0) {
@@ -103,7 +112,7 @@ async function handleEvent(event) {
 
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
-  if(currentBalance < startBalance && currentBalance <= (startBalance / 2)) {
+  if(currentBalance < startBalance && Number(currentBalance) <= (Number(startBalance) / 2)) {
     console.log('Balance hit half way point shutting down');
     process.exit();
   }
