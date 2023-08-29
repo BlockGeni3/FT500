@@ -81,12 +81,6 @@ async function handleEvent(event) {
   } else {
     finalGasPrice = (cachedGasPrice * 150) / 100; 
   }
-  
-  // Add this condition to explicitly skip if qty is 0
-  if (qty === 0) {
-    console.log('Skipped buying shares as the quantity is zero.');
-    return;
-  }
 
   // Skip if cant be sold
   if(Number(sellPrice) === 0) {
@@ -114,7 +108,7 @@ async function handleEvent(event) {
 
   if(buyPrice > 0) {
     try {
-      const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
+      const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: parseInt(finalGasPrice), nonce: nonce});
       fs.writeFileSync('./buys.txt', `\n${amigo}, ${buyPrice}`, {flag: 'a'});
       console.log("--------###BUY###----------");
       console.log({
@@ -136,10 +130,10 @@ async function handleEvent(event) {
 }
 
 function determineQty(weiBalance) {
-  if (weiBalance < 30000000000000000) return 0;
-  if (weiBalance < 90000000000000000) return 1;
-  if (weiBalance < 900000000000000000) return 2;
-  return 3;
+  if (weiBalance < 30000000000000000) return 1;
+  if (weiBalance < 90000000000000000) return 2;
+  if (weiBalance < 900000000000000000) return 3;
+  return 4;
 }
 
 const run = () => {
