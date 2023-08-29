@@ -108,6 +108,8 @@ app.listen(port, () => {
             if(Number(sellPrice) !== 0) {
                 if(Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}`);
+                } else if(realSellPrice < friendShareBoughtForPrice) {
+                    console.log(`Would be selling at a loss for ${realSellPrice}, skipping`);
                 } else {
                     await delay(2000);  // 2-second delay
 
