@@ -8,7 +8,7 @@ const express = require('express');
 dotenv.config();
 
 const app = express();
-const port = 4000;
+const port = 5005;
 
 let buyPricesMap = new Map();  // Use a Map to keep track of buy prices for quicker lookup
 
@@ -16,8 +16,8 @@ app.listen(port, async () => {
   console.log(`Server started on port ${port}`);
 
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
-  const throttledHandleEvent = _.throttle(handleEvent, 5000);
-  const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
+  const throttledHandleEvent = _.throttle(handleEvent, 500);
+  const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base/3e0d2f7bdb742808c952600a1196edcb0c88f661108c26296de11b5cf7c65494`);
   const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
   const account = wallet.connect(provider);
   const startBalance = await provider.getBalance(wallet.address); 
@@ -184,11 +184,11 @@ app.listen(port, async () => {
         setTimeout(async () => {
           if (!buyPrice) return;
 
-          if (Number(sellPrice) > 1.50 * Number(buyPrice) && 1.50 * Number(buyPrice) > parseInt(finalGasPrice)) {
+          if (Number(sellPrice) > 1.50 * Number(buyPrice) && 1.50 * Number(sellPrice) > parseInt(finalGasPrice)) {
               try {
                   const tx = await friends.sellShares(amigo, 1, {
                       gasPrice: parseInt(finalGasPrice),
-                      nonce: nonce
+                      nonce: nonce+1
                   });
                   console.log(`Sold shares of ${amigo} for a profit!`);
               } catch (error) {
@@ -218,7 +218,7 @@ app.listen(port, async () => {
       });
     }, {
       retries: 5,
-      minTimeout: 3000,
+      minTimeout: 2500,
       factor: 2
     });
   };
