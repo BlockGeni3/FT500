@@ -21,6 +21,7 @@ app.listen(port, () => {
   const friends = new ethers.Contract(
     friendsAddress,
     [
+      'function sharesBalance(address sharesSubject, address holder) public view returns (uint256)',
       'function buyShares(address arg0, uint256 arg1)',
       'function sellShares(address sharesSubject, uint256 amount) public payable',
       'function getBuyPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)',
@@ -148,24 +149,32 @@ app.listen(port, () => {
 
   async function handleSell(event) {
       const amigo = event.args[1];
+      const bal = await friends.sharesBalance(amigo, wallet.address);
 
-      if (!purchasedShares.has(amigo)) return;  // We only care about shares we've previously bought.
-
-      // Here, fetch the current price and compare it to your buy price.
-      const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
-      
-      const buyPrice = (fs.readFileSync('./buys.txt', 'utf8').split('\n').find(line => line.startsWith(amigo)) || '').split(', ')[1];
-      
-      if (!buyPrice) return;  // We didn't find the buy price for this share in the buys.txt.
-
-      // Here, you can decide your condition to sell. For simplicity, let's say if the sell price is 10% more than the buy price, we sell.
-      if (Number(sellPrice) > 1.10 * Number(buyPrice)) {
-          try {
-              const tx = await friends.sellShares(amigo, 1); // Assuming you're selling 1 share. Adjust this accordingly.
-              console.log(`Sold shares of ${amigo} for a profit!`);
-          } catch (error) {
-              console.error(`Error selling shares of ${amigo}:`, error.message);
-          }
+      if(bal > 0) {
+        if (!purchasedShares.has(amigo)) return;  // We only care about shares we've previously bought.
+  
+        // Here, fetch the current price and compare it to your buy price.
+        const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
+        
+        const buyPrice = (fs.readFileSync('./buys.txt', 'utf8').split('\n').find(line => line.startsWith(amigo)) || '').split(', ')[1];
+        
+        if (!buyPrice) return;  // We didn't find the buy price for this share in the buys.txt.
+  
+        // Here, you can decide your condition to sell. For simplicity, let's say if the sell price is 10% more than the buy price, we sell.
+        if (Number(sellPrice) > 1.10 * Number(buyPrice)) {
+            try {
+                const tx = await friends.sellShares(amigo, 1); // Assuming you're selling 1 share. Adjust this accordingly.
+                console.log(`Sold shares of ${amigo} for a profit!`);
+            } catch (error) {
+                console.error(`Error selling shares of ${amigo}:`, error.message);
+            }
+        }
+      } else {
+        if(purchasedShares.has(amigo)) {
+          console.log(`You dont own share, reseting balance !`);
+          purchasedShares.delete(amigo);
+        }
       }
   }
 
