@@ -181,7 +181,7 @@ app.listen(port, async () => {
         setTimeout(async () => {
           if (!buyPrice) return;
 
-          if (Number(sellPrice) > (1.10 * Number(buyPrice) + finalGasPrice)) {
+          if (Number(sellPrice) > (1.50 * Number(buyPrice) + finalGasPrice)) {
               try {
                   const tx = await friends.sellShares(amigo, 1, {
                       gasPrice: parseInt(finalGasPrice),
