@@ -5,6 +5,20 @@ const express = require('express');
 const port = 5006;
 const _ = require('lodash');
 
+const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
+const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
+const friends = new ethers.Contract(
+    friendsAddress,
+    [
+        'function sellShares(address sharesSubject, uint256 amount) public payable',
+        'function sharesBalance(address sharesSubject, address holder) public view returns (uint256)',
+        'function sharesSupply(address sharesSubject) public view returns (uint256)',
+        'function getSellPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)'
+    ],
+    wallet
+);
+
 const app = express();
 
 const delay = (duration) => {
@@ -36,23 +50,10 @@ app.listen(port, () => {
         console.error('Error:', error);
     });
 
-    const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
-    const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
-    const wallet = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
-    const friends = new ethers.Contract(
-        friendsAddress,
-        [
-            'function sellShares(address sharesSubject, uint256 amount) public payable',
-            'function sharesBalance(address sharesSubject, address holder) public view returns (uint256)',
-            'function sharesSupply(address sharesSubject) public view returns (uint256)',
-            'function getSellPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)'
-        ],
-        wallet
-    );
-
     let cachedGasPrice = null;
     let lastGasFetch = 0;
     let baseGasPrice = null;
+    let finalGasPrice;
 
     const fetchGasPrice = async () => {
         if (Date.now() - lastGasFetch > 1 * 60 * 1000) { // Fetch every 1 minute
@@ -73,8 +74,7 @@ app.listen(port, () => {
         const sellPrice = await friends.getSellPriceAfterFee(friend, bal);
 
         await fetchGasPrice(); // Fetch the latest gas price
-
-        let finalGasPrice = cachedGasPrice;
+        finalGasPrice = cachedGasPrice;
 
         // Adjust gas price based on the sell price (Note: We adjust based on the buy price in the provided code. For selling, I'm assuming similar logic with sell price.)
         if (sellPrice < baseGasPrice) {
@@ -108,7 +108,7 @@ app.listen(port, () => {
             if(Number(sellPrice) !== 0) {
                 if(Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}`);
-                } else if(realSellPrice < friendShareBoughtForPrice) {
+                } else if(parseInt(realSellPrice) < (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice))) {
                     console.log(`Would be selling at a loss for ${realSellPrice}, skipping`);
                 } else {
                     await delay(2000);  // 2-second delay
@@ -122,10 +122,11 @@ app.listen(port, () => {
             } else {
                 console.log('Skipped selling shares as they cant be sold (0 value).');
             }
-        }
+        } 
+        // Exit the application
         sells = updatedSells;
         fs.promises.writeFile('./buys.txt', '\n'+sells.join('\n'), 'utf8');
-        process.exit(0); // Exit the application
+        process.exit(0);
     }
 
     process.on('uncaughtException', error => {
