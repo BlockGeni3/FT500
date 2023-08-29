@@ -60,7 +60,7 @@ app.listen(port, () => {
     // if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
     if (weiBalance <= 5000000000000000) {
       const ethBalance = (Number(weiBalance) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-      console.log(`No Money No Honey: `, amigo, ethBalance);
+      console.log(`They broke dawg:: `, amigo, ethBalance);
     }
     // Store the last 20 balances
     balanceSet.add(weiBalance);
