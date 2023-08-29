@@ -8,7 +8,7 @@ const express = require('express');
 dotenv.config();
 
 const app = express();
-const port = 5005;
+const port = 4000;
 
 let buyPricesMap = new Map();  // Use a Map to keep track of buy prices for quicker lookup
 
