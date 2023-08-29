@@ -31,7 +31,7 @@ async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
       baseGasPrice =  feeData.maxFeePerGas;
-      cachedGasPrice = (parseInt(feeData.maxFeePerGas) * 200) / 100;
+      cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 110) / 100);
       lastGasFetch = Date.now();
     } else {
       console.error('Unable to get fee data or maxFeePerGas.');
@@ -100,16 +100,6 @@ async function handleEvent(event) {
     return;
   }
 
-  // Log all conditions for clarity
-  console.log({
-    qty: qty,
-    buyPrice: buyPrice,
-    sellPrice: sellPrice,
-    finalGasPrice: finalGasPrice,
-    currentBalance: currentBalance.toString(),
-    nonce: nonce
-  });
-
   if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
   if(currentBalance < startBalance && Number(currentBalance) <= (Number(startBalance) / 2)) {
@@ -117,7 +107,7 @@ async function handleEvent(event) {
     process.exit();
   }
 
-  if (buyPrice < finalGasPrice) {
+  if (buyPrice < Number(finalGasPrice)) {
     console.log('Skipped buying shares as they cost less than the gas fee.');
     return;
   }
@@ -126,10 +116,18 @@ async function handleEvent(event) {
     try {
       const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: finalGasPrice, nonce: nonce});
       fs.writeFileSync('./buys.txt', `\n${amigo}, ${buyPrice}`, {flag: 'a'});
-      const ethBuy = (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-      console.log('### BUY ###', amigo, ethBuy);
+      console.log("--------###BUY###----------");
+      console.log({
+        qty: qty,
+        buyPrice: (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
+        sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
+        finalGasPrice: finalGasPrice,
+        currentBalance: currentBalance.toString(),
+        nonce: nonce
+      });
       const receipt = await tx.wait();
       console.log('Transaction Mined:', receipt.blockNumber);
+      console.log("---------------------------");
     } catch (error) {
       let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
       console.log('Transaction Failed:', outMessage);
