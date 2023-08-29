@@ -4,8 +4,8 @@ require("dotenv").config();
 const _ = require('lodash');
 const retry = require('async-retry');
 const express = require('express');
-const port = 5005;
 
+const port = 5005;
 const app = express();
 
 app.listen(port, () => {
@@ -22,6 +22,7 @@ app.listen(port, () => {
     friendsAddress,
     [
       'function buyShares(address arg0, uint256 arg1)',
+      'function sellShares(address sharesSubject, uint256 amount) public payable',
       'function getBuyPriceAfterFee(address sharesSubject, uint256 amount) public view returns (uint256)',
       'event Trade(address trader, address subject, bool isBuy, uint256 shareAmount, uint256 ethAmount, uint256 protocolEthAmount, uint256 subjectEthAmount, uint256 supply)',
       'function sharesSupply(address sharesSubject) public view returns (uint256)',
@@ -34,6 +35,7 @@ app.listen(port, () => {
   let lastGasFetch = 0;
   let baseGasPrice = null;
   const balanceSet = new Set();
+  const purchasedShares = new Set();
 
   async function fetchGasPrice() {
     if (Date.now() - lastGasFetch > 1 * 60 * 1000) { // Fetch every 1 minute instead of 5
@@ -131,6 +133,7 @@ app.listen(port, () => {
         const receipt = await tx.wait();
         console.log('Transaction Mined:', receipt.blockNumber);
         console.log("---------------------------");
+        purchasedShares.add(amigo);
       } catch (error) {
         if (error.message.includes('Too many')) {
           console.error('Rate limit hit. Pausing for a moment...');
@@ -143,6 +146,29 @@ app.listen(port, () => {
     }
   }
 
+  async function handleSell(event) {
+      const amigo = event.args[1];
+
+      if (!purchasedShares.has(amigo)) return;  // We only care about shares we've previously bought.
+
+      // Here, fetch the current price and compare it to your buy price.
+      const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
+      
+      const buyPrice = (fs.readFileSync('./buys.txt', 'utf8').split('\n').find(line => line.startsWith(amigo)) || '').split(', ')[1];
+      
+      if (!buyPrice) return;  // We didn't find the buy price for this share in the buys.txt.
+
+      // Here, you can decide your condition to sell. For simplicity, let's say if the sell price is 10% more than the buy price, we sell.
+      if (Number(sellPrice) > 1.10 * Number(buyPrice)) {
+          try {
+              const tx = await friends.sellShares(amigo, 1); // Assuming you're selling 1 share. Adjust this accordingly.
+              console.log(`Sold shares of ${amigo} for a profit!`);
+          } catch (error) {
+              console.error(`Error selling shares of ${amigo}:`, error.message);
+          }
+      }
+  }
+
   function determineQty(weiBalance) {
     if (weiBalance < 30000000000000000) return 1;
     if (weiBalance < 90000000000000000) return 2;
@@ -153,7 +179,10 @@ app.listen(port, () => {
   const run = async () => {
     await retry(async () => {
       // Here we start listening for events. If an error occurs, it'll retry based on the retry configuration.
-      friends.on(filter, throttledHandleEvent);
+      friends.on(filter, event => {
+        throttledHandleEvent(event);
+        handleSell(event);
+      });
     }, {
       retries: 5,
       minTimeout: 3000,
