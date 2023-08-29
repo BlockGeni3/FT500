@@ -3,8 +3,13 @@ const fs = require('fs');
 require("dotenv").config();
 const express = require('express');
 const port = 5006;
+const _ = require('lodash');
 
 const app = express();
+
+const delay = (duration) => {
+    return new Promise(resolve => _.delay(resolve, duration));
+};
 
 app.listen(port, () => {
     async function txtToArray(filePath) {
@@ -98,11 +103,14 @@ app.listen(port, () => {
             const [friendAddress, friendShareBoughtForPrice] = friend.split(',').map(e => e.trim());
             const sellPrice = await friends.getSellPriceAfterFee(friendAddress, 1);
             const bal = await friends.sharesBalance(friendAddress, wallet.address);
+            const realSellPrice = Number(Number(sellPrice) / 2);
 
             if(Number(sellPrice) !== 0) {
                 if(Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}`);
                 } else {
+                    await delay(2000);  // 2-second delay
+
                     const newBal = await sellSharesForFriend(friendAddress);
                     console.log(`Shares sold for ${sellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
                     if (Number(newBal) > 0) {
