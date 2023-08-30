@@ -103,7 +103,7 @@ app.listen(port, async () => {
     }
 
     // Skip if cant be sold
-    if(Number(sellPrice) === 0) {
+    if(qty > 0 && Number(sellPrice) === 0) {
       console.log('Skipped buying shares as they cant be sold.');
       return;
     }
