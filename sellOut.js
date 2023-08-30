@@ -106,16 +106,17 @@ app.listen(port, () => {
             const nonce = await provider.getTransactionCount(wallet.address, 'pending');
             const realSellPrice = Number(sellPrice);
 
-            if(Number(sellPrice) !== 0) {
+            if(realSellPrice !== 0) {
                 await fetchGasPrice(); 
                 finalGasPrice = cachedGasPrice;
                 const trueBuyPrice = (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice));
+                const finalSell = parseInt(realSellPrice) * 1.10;
 
-                await delay(100);  // 2-second delay
+                await delay(100);  // 0.1-second delay
 
                 if(Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}, removing`);
-                } else if(parseInt(realSellPrice) < trueBuyPrice) {
+                } else if(finalSell < trueBuyPrice) {
                     const loss = ((trueBuyPrice - parseInt(realSellPrice))* 0.000000000000000001).toFixed(4).toString() + " ETH";
                     console.log(`Would be selling at a loss for ${loss}, skipping`);
                     updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.

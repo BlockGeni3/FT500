@@ -15,6 +15,10 @@ let globalNonce = null; // Global nonce variable
 
 app.listen(port, async () => {
   console.log(`Server started on port ${port}`);
+  
+  let cachedGasPrice = null;
+  let baseGasPrice = null;
+  let finalGasPrice;
 
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
   const throttledHandleEvent = _.throttle(handleEvent, 1000);
@@ -36,10 +40,6 @@ app.listen(port, async () => {
     account
   );
   const filter = friends.filters.Trade(null, null, null, null, null, null, null, null);
-  let cachedGasPrice = null;
-  let lastGasFetch = 0;
-  let baseGasPrice = null;
-  let finalGasPrice;
   const balanceSet = new Set();
   const purchasedShares = new Set();
   const blacklistedAddresses = new Set();
@@ -192,7 +192,7 @@ app.listen(port, async () => {
         setTimeout(async () => {
           if (!buyPrice) return;
 
-          if (Number(sellPrice) > (1.50 * Number(buyPrice) + finalGasPrice)) {
+          if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
             try {
                 // Increment the globalNonce for each transaction
                 globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
