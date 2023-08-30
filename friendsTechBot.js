@@ -15,7 +15,7 @@ let globalNonce = null; // Global nonce variable
 
 app.listen(port, async () => {
   console.log(`Server started on port ${port}`);
-  
+
   let cachedGasPrice = null;
   let baseGasPrice = null;
   let finalGasPrice;
@@ -189,10 +189,10 @@ app.listen(port, async () => {
         const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
         const buyPrice = buyPricesMap.get(amigo);
  
-        setTimeout(async () => {
-          if (!buyPrice) return;
+        // Instead of setting a timeout, check for profit conditions immediately
+        if (!buyPrice) return;
 
-          if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
+        if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
             try {
                 // Increment the globalNonce for each transaction
                 globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
@@ -206,10 +206,9 @@ app.listen(port, async () => {
         
                 console.log(`Sold shares of ${amigo} for a profit!`);
             } catch (error) {
-                console.error(`Error selling shares of ${amigo}:, error.message`);
+                console.error(`Error selling shares of ${amigo}:`, error.message);
             }
-          }
-        }, 500);
+        }
     } else {
         purchasedShares.delete(amigo);
     }
@@ -224,10 +223,10 @@ app.listen(port, async () => {
 
   const run = async () => {
     await retry(async () => {
-        friends.on(filter, async (event) => { 
-            await throttledHandleEvent(event);
-            await handleSell(event);
-        });
+      friends.on(filter, async (event) => { 
+        await throttledHandleEvent(event);
+        await handleSell(event);
+      });
     }, {
         retries: 5,
         minTimeout: 3000,
