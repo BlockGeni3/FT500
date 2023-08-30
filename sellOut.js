@@ -98,34 +98,45 @@ app.listen(port, () => {
     }
 
     const init = async () => {
-        let updatedSells = [];
+        let updatedShares = [];  // Initialize the updatedSells array.
         for (const friend of sells) {
             const [friendAddress, friendShareBoughtForPrice] = friend.split(',').map(e => e.trim());
             const sellPrice = await friends.getSellPriceAfterFee(friendAddress, 1);
             const bal = await friends.sharesBalance(friendAddress, wallet.address);
-            const realSellPrice = Number(Number(sellPrice) / 2);
+            const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+            const realSellPrice = Number(sellPrice);
 
             if(Number(sellPrice) !== 0) {
-                if(Number(bal) === 0) {
-                    console.log(`You don't own share ${friendAddress}`);
-                } else if(parseInt(realSellPrice) < (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice))) {
-                    console.log(`Would be selling at a loss for ${realSellPrice}, skipping`);
-                } else {
-                    await delay(2000);  // 2-second delay
+                await fetchGasPrice(); 
+                finalGasPrice = cachedGasPrice;
+                const trueBuyPrice = (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice));
 
-                    const newBal = await sellSharesForFriend(friendAddress);
-                    console.log(`Shares sold for ${sellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
+                await delay(100);  // 2-second delay
+
+                if(Number(bal) === 0) {
+                    console.log(`You don't own share ${friendAddress}, removing`);
+                } else if(parseInt(realSellPrice) < trueBuyPrice) {
+                    const loss = ((trueBuyPrice - parseInt(realSellPrice))* 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    console.log(`Would be selling at a loss for ${loss}, skipping`);
+                    updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
+                } else { 
+                    const newBal = await sellSharesForFriend(friendAddress, {
+                        nonce: nonce
+                    });
+                    console.log(`Shares sold for ${realSellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
                     if (Number(newBal) > 0) {
-                        updatedSells.push(friend);
+                        updatedShares.pop(friend); // If some balance remains, then push to updatedSells.
                     }
-                }
+                }               
             } else {
-                console.log('Skipped selling shares as they cant be sold (0 value).');
+                console.log("Skipped selling shares as they can't be sold (0 value).");
+                updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
             }
         } 
-        // Exit the application
-        sells = updatedSells;
-        fs.promises.writeFile('./buys.txt', '\n'+sells.join('\n'), 'utf8');
+        console.log(updatedShares.join('\n'))
+        // Update the buys.txt file with the updatedSells array.
+        await fs.promises.writeFile('./buys.txt', updatedShares.join('\n'), 'utf8');
+
         process.exit(0);
     }
 

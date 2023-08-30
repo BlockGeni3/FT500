@@ -1,5 +1,5 @@
 const ethers = require('ethers');
-const fs = require('fs').promises;
+const fs = require('fs').promises;  // Using promises version of fs for asynchronous operations
 const dotenv = require("dotenv");
 const _ = require('lodash');
 const retry = require('async-retry');
@@ -10,13 +10,14 @@ dotenv.config();
 const app = express();
 const port = 5005;
 
-let buyPricesMap = new Map();
+let buyPricesMap = new Map();  // Use a Map to keep track of buy prices for quicker lookup
+let globalNonce = null; // Global nonce variable
 
 app.listen(port, async () => {
   console.log(`Server started on port ${port}`);
 
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
-  const throttledHandleEvent = _.throttle(handleEvent, 100);
+  const throttledHandleEvent = _.throttle(handleEvent, 1000);
   const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
   const wallet = new ethers.Wallet(process.env.PRIVATE_KEY);
   const account = wallet.connect(provider);
@@ -41,21 +42,20 @@ app.listen(port, async () => {
   let finalGasPrice;
   const balanceSet = new Set();
   const purchasedShares = new Set();
+  const blacklistedAddresses = new Set();
 
-  console.log("Data set up entering start")
-
-  const fetchGasPrice = async () => {
-    if (Date.now() - lastGasFetch > 1 * 60 * 1000) { 
-        const feeData = await provider.getFeeData();
-        if (feeData && feeData.maxFeePerGas) {
-            baseGasPrice = feeData.maxFeePerGas;
-            cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 110) / 100);
-            lastGasFetch = Date.now();
-        } else {
-            console.error('Unable to get fee data or maxFeePerGas.');
-        }
+  async function fetchGasPrice() {
+    const feeData = await provider.getFeeData();
+    if (feeData && feeData.maxFeePerGas) {
+        baseGasPrice = feeData.maxFeePerGas;
+        cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 150) / 100);
+    } else {
+        console.error('Unable to get fee data or maxFeePerGas.');
     }
-  };
+  }
+
+  // Fetch gas price once every minute, but not during every event.
+  setInterval(fetchGasPrice, 60 * 1000);
 
   function shouldActOnEvent(event, weiBalance) {
     const amigo = event.args[1];
@@ -63,10 +63,14 @@ app.listen(port, async () => {
     if (event.args[2] !== true) return false;
     if (event.args[7] > 1n && (event.args[7] > 4n || event.args[0] !== event.args[1])) return false;
     if (balanceSet.has(weiBalance)) return false; // using a Set instead of an Array
-    // if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
+    if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
     if (weiBalance <= 5000000000000000) {
       const ethBalance = (Number(weiBalance) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-      console.log(`They broke dawg:: `, amigo, ethBalance);
+      console.log(`They broke dawg::` , amigo, ethBalance);
+    }
+    if (blacklistedAddresses.has(amigo)) {
+      console.log('Skipped buying shares from known bot:', amigo);
+      return false;
     }
     // Store the last 20 balances
     balanceSet.add(weiBalance);
@@ -79,19 +83,14 @@ app.listen(port, async () => {
     const amigo = event.args[1];
     const weiBalance = await provider.getBalance(amigo);
     const qty = determineQty(weiBalance);
-    
     const [currentBalance, nonce, sellPrice, buyPrice] = await Promise.all([
-        provider.getBalance(wallet.address), 
+        provider.getBalance(wallet.address),
         provider.getTransactionCount(wallet.address, 'pending'),
         friends.getSellPriceAfterFee(amigo, 1),
         friends.getBuyPriceAfterFee(amigo, qty)
     ]);
 
     if (!shouldActOnEvent(event, weiBalance)) return;
-
-    console.log('setting up handleevent')
-
-    await fetchGasPrice(); 
 
     finalGasPrice = cachedGasPrice;
 
@@ -126,32 +125,41 @@ app.listen(port, async () => {
       return;
     }
 
-    try {
-        const tx = await friends.buyShares(amigo, qty, {value: buyPrice, gasPrice: parseInt(finalGasPrice), nonce: nonce});
-        await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
-        buyPricesMap.set(amigo, buyPrice);  
-        console.log("--------###BUY###----------");
-        console.log({
-          qty: qty,
-          buyPrice: (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
-          sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
-          finalGasPrice: finalGasPrice,
-          currentBalance: currentBalance.toString(),
-          nonce: nonce
-        });
-        const receipt = await tx.wait();
-        console.log('Transaction Mined:', receipt.blockNumber);
-        console.log("---------------------------");
-        purchasedShares.add(amigo);
-    } catch (error) {
-        handleTxError(error);
+    if (buyPrice > 0) {
+      try {
+          // Increment the globalNonce for each transaction
+          globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
+
+          const tx = await friends.buyShares(amigo, qty, {
+            value: buyPrice,
+            gasPrice: parseInt(finalGasPrice),
+            nonce: globalNonce
+          });
+          await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
+          buyPricesMap.set(amigo, buyPrice);  
+          console.log("--------###BUY###----------");
+          console.log({
+            qty: qty,
+            buyPrice: (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
+            sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
+            finalGasPrice: finalGasPrice,
+            currentBalance: currentBalance.toString(),
+            nonce: nonce
+          });
+          const receipt = await tx.wait();
+          console.log('Transaction Mined:', receipt.blockNumber);
+          console.log("---------------------------");
+          purchasedShares.add(amigo);
+      } catch (error) {
+          handleTxError(error);
+      }
     }
   }
 
   function handleTxError(error) {
     if (error.message.includes('Too many')) {
         console.error('Rate limit hit. Pausing for a moment...');
-        setTimeout(() => {}, 10000);  // Corrected comment and delay time
+        setTimeout(() => {}, 10000);  // wait for 10 seconds
     } else {
         let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
         console.error('Transaction Failed:', outMessage);
@@ -175,27 +183,28 @@ app.listen(port, async () => {
 
   async function handleSell(event) {
     const amigo = event.args[1];
-    const [bal, sellPrice, nonce] = await Promise.all([
-      friends.sharesBalance(amigo, wallet.address),
-      friends.getSellPriceAfterFee(amigo, 1),
-      provider.getTransactionCount(wallet.address, 'pending')
-    ]);
+    const bal = await friends.sharesBalance(amigo, wallet.address);
 
     if (bal > 0 && purchasedShares.has(amigo)) {
+        const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
         const buyPrice = buyPricesMap.get(amigo);
  
         setTimeout(async () => {
           if (!buyPrice) return;
 
-          if (Number(sellPrice) > 1.50 * Number(buyPrice) && 1.50 * Number(buyPrice) > parseInt(finalGasPrice)) {
+          if (Number(sellPrice) > (1.50 * Number(buyPrice) + finalGasPrice)) {
               try {
+                  // Increment the globalNonce for each transaction
+                  globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
+      
                   const tx = await friends.sellShares(amigo, 1, {
                       gasPrice: parseInt(finalGasPrice),
-                      nonce: nonce
+                      nonce: globalNonce
                   });
+    
                   console.log(`Sold shares of ${amigo} for a profit!`);
               } catch (error) {
-                  console.error(`Error selling shares of ${amigo}:`, error.message);
+                  console.error(`Error selling shares of ${amigo}:, error.message`);
               }
           }
         }, 500);
@@ -203,7 +212,6 @@ app.listen(port, async () => {
         purchasedShares.delete(amigo);
     }
   }
-
 
   function determineQty(weiBalance) {
     if (weiBalance < 30000000000000000) return 1;
@@ -214,31 +222,38 @@ app.listen(port, async () => {
 
   const run = async () => {
     await retry(async () => {
-        console.log('filtering')
-        friends.on(filter, event => {
-            throttledHandleEvent(event);
-            handleSell(event);
+        friends.on(filter, async (event) => { 
+            await throttledHandleEvent(event);
+            await handleSell(event);
         });
     }, {
         retries: 5,
-        minTimeout: 1000,
-        factor: 2
+        minTimeout: 3000,
+        factor: 1
     });
   };
 
+  // Main function execution
   (async function main() {
-    try {
-        await run();
-    } catch (error) {
-        handleTxError(error);  // Used the handleTxError function to consolidate error handling
-    }
+      try {
+          await run();
+      } catch (error) {
+          handleError(error);
+      }
   })();
 
-  process.on('uncaughtException', error => {
-    console.error('Uncaught Exception:', error);
-  });
+  function handleError(error) {
+      if (error.message.includes('Too many')) {
+          console.error('Rate limit hit. Pausing for a moment...');
+          setTimeout(() => {}, 10000);
+      } else {
+          let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+          console.error('Error encountered:', outMessage);
+      }
+  }
 
+  process.on('uncaughtException', handleError);
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Promise Rejection:', reason);
+      console.error('Unhandled Promise Rejection:', reason);
   });
 });
