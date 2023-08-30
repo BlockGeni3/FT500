@@ -102,17 +102,17 @@ app.listen(port, async () => {
       finalGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
     }
 
-    // Skip if cant be sold
-    if(Number(sellPrice) === 0) {
-      console.log('Skipped buying shares as they cant be sold.');
-      return;
-    }
+    // // Skip if cant be sold
+    // if(Number(sellPrice) === 0) {
+    //   console.log('Skipped buying shares as they cant be sold.');
+    //   return;
+    // }
     
-    // Add this condition to explicitly skip if qty is 0
-    if (qty > 0 && buyPrice === 0) {
-      console.log('Skipped buying shares as they look botted.');
-      return;
-    }
+    // // Add this condition to explicitly skip if qty is 0
+    // if (qty === 0) {
+    //   console.log('Skipped buying shares as they look botted.');
+    //   return;
+    // }
 
     if ((qty < 2 && buyPrice > 2000000000000000) || buyPrice > 10000000000000000) return;
 
