@@ -123,7 +123,9 @@ app.listen(port, () => {
                     const newBal = await sellSharesForFriend(friendAddress, {
                         nonce: nonce
                     });
-                    console.log(`Shares sold for ${realSellPrice}, bought for ${friendShareBoughtForPrice}, your balance is now ${newBal}`);
+                    const buyP = (Number(friendShareBoughtForPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    const sellP = (Number(realSellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    console.log(`Shares sold for ${sellP}, bought for ${buyP}, your balance is now ${newBal}`);
                     if (Number(newBal) > 0) {
                         updatedShares.pop(friend); // If some balance remains, then push to updatedSells.
                     }

@@ -193,19 +193,21 @@ app.listen(port, async () => {
           if (!buyPrice) return;
 
           if (Number(sellPrice) > (1.50 * Number(buyPrice) + finalGasPrice)) {
-              try {
-                  // Increment the globalNonce for each transaction
-                  globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
-      
-                  const tx = await friends.sellShares(amigo, 1, {
-                      gasPrice: parseInt(finalGasPrice),
-                      nonce: globalNonce
-                  });
-    
-                  console.log(`Sold shares of ${amigo} for a profit!`);
-              } catch (error) {
-                  console.error(`Error selling shares of ${amigo}:, error.message`);
-              }
+            try {
+                // Increment the globalNonce for each transaction
+                globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
+        
+                const tx = await friends.sellShares(amigo, 1, {
+                    gasPrice: parseInt(finalGasPrice),
+                    nonce: globalNonce
+                });
+        
+                purchasedShares.delete(amigo); // Remove address from set after selling
+        
+                console.log(`Sold shares of ${amigo} for a profit!`);
+            } catch (error) {
+                console.error(`Error selling shares of ${amigo}:, error.message`);
+            }
           }
         }, 500);
     } else {
