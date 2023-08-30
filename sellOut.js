@@ -115,7 +115,7 @@ app.listen(port, () => {
                 const potentialProfit = finalSell - trueBuyPrice;
                 const profitMarginPercentage = (potentialProfit / trueBuyPrice) * 100;
 
-                await delay(100);  // 0.1-second delay
+                await delay(500);  // 0.1-second delay
 
                 if (Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}, removing`);
