@@ -18,6 +18,7 @@ const friends = new ethers.Contract(
     ],
     wallet
 );
+const MIN_PROFIT_MARGIN_PERCENTAGE = 10;
 
 const app = express();
 
@@ -110,18 +111,19 @@ app.listen(port, () => {
                 await fetchGasPrice(); 
                 finalGasPrice = cachedGasPrice;
                 const trueBuyPrice = (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice));
-                const finalSell = parseInt(realSellPrice) * 1.10;
+                const finalSell = parseInt(realSellPrice);
+                const potentialProfit = finalSell - trueBuyPrice;
+                const profitMarginPercentage = (potentialProfit / trueBuyPrice) * 100;
 
                 await delay(100);  // 0.1-second delay
 
-                if(Number(bal) === 0) {
+                if (Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}, removing`);
-                } else if(finalSell < trueBuyPrice) {
-                    
-                    const loss = ((trueBuyPrice - parseInt(realSellPrice))* 0.000000000000000001).toFixed(4).toString() + " ETH";
-                    console.log(`Would be selling at a loss for ${loss}, skipping`);
+                } else if (finalSell < trueBuyPrice || profitMarginPercentage < MIN_PROFIT_MARGIN_PERCENTAGE) {
+                    const loss = ((trueBuyPrice - parseInt(realSellPrice)) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    console.log(`Would be selling at a loss for ${loss}, profit margin is below threshold (${MIN_PROFIT_MARGIN_PERCENTAGE}%), skipping`);
                     updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
-                } else if(finalSell > trueBuyPrice) { 
+                } else if (finalSell > trueBuyPrice) { 
                     const newBal = await sellSharesForFriend(friendAddress, {
                         nonce: nonce
                     });
@@ -131,7 +133,7 @@ app.listen(port, () => {
                     if (Number(newBal) > 0) {
                         updatedShares.pop(friend); // If some balance remains, then push to updatedSells.
                     }
-                }               
+                }
             } else {
                 console.log("Skipped selling shares as they can't be sold (0 value).");
                 updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.

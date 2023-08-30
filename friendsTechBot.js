@@ -11,7 +11,6 @@ const app = express();
 const port = 5005;
 
 let buyPricesMap = new Map();  // Use a Map to keep track of buy prices for quicker lookup
-let globalNonce = null; // Global nonce variable
 
 app.listen(port, async () => {
   console.log(`Server started on port ${port}`);
@@ -60,6 +59,8 @@ app.listen(port, async () => {
   function shouldActOnEvent(event, weiBalance) {
     const amigo = event.args[1];
 
+    // Check if the address has made too many recent trades, which might indicate bot activity.
+    if (balanceSet.size > 5 && balanceSet.has(weiBalance)) return false;
     if (event.args[2] !== true) return false;
     if (event.args[7] > 1n && (event.args[7] > 4n || event.args[0] !== event.args[1])) return false;
     if (balanceSet.has(weiBalance)) return false; // using a Set instead of an Array
@@ -95,10 +96,10 @@ app.listen(port, async () => {
     finalGasPrice = cachedGasPrice;
 
     // Adjust gas price based on buy price
-    if(buyPrice < baseGasPrice) {
-      finalGasPrice = (cachedGasPrice * 101) / 100;
+    if (buyPrice < baseGasPrice) {
+      finalGasPrice = (cachedGasPrice * 110) / 100; // 110% of the cached price
     } else {
-      finalGasPrice = (cachedGasPrice * 150) / 100; 
+      finalGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
     }
 
     // Skip if cant be sold
@@ -127,13 +128,10 @@ app.listen(port, async () => {
 
     if (buyPrice > 0) {
       try {
-          // Increment the globalNonce for each transaction
-          globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
-
           const tx = await friends.buyShares(amigo, qty, {
             value: buyPrice,
             gasPrice: parseInt(finalGasPrice),
-            nonce: globalNonce
+            nonce: nonce
           });
           await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
           buyPricesMap.set(amigo, buyPrice);  
@@ -182,24 +180,21 @@ app.listen(port, async () => {
   await initBuyPrices();
 
   async function handleSell(event) {
-    const amigo = event.args[1];
-    const bal = await friends.sharesBalance(amigo, wallet.address);
-
-    if (bal > 0 && purchasedShares.has(amigo)) {
+      const amigo = event.args[1];
+      const bal = await friends.sharesBalance(amigo, wallet.address);
+    
+      if (bal > 0 && purchasedShares.has(amigo)) {
         const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
         const buyPrice = buyPricesMap.get(amigo);
- 
-        // Instead of setting a timeout, check for profit conditions immediately
+      
         if (!buyPrice) return;
-
+    
+        // Adjusted the multiplier to 1.6
         if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
             try {
-                // Increment the globalNonce for each transaction
-                globalNonce = globalNonce !== null ? globalNonce + 1 : nonce;
-        
                 const tx = await friends.sellShares(amigo, 1, {
                     gasPrice: parseInt(finalGasPrice),
-                    nonce: globalNonce
+                    nonce: await provider.getTransactionCount(wallet.address, 'pending')
                 });
         
                 purchasedShares.delete(amigo); // Remove address from set after selling
@@ -215,23 +210,25 @@ app.listen(port, async () => {
   }
 
   function determineQty(weiBalance) {
-    if (weiBalance < 30000000000000000) return 1;
-    if (weiBalance < 90000000000000000) return 2;
+    if (weiBalance < 40000000000000000) return 1;
+    if (weiBalance < 80000000000000000) return 2;
     if (weiBalance < 900000000000000000) return 3;
     return 4;
   }
 
+  async function processEvent(event) {
+    await throttledHandleEvent(event);
+    await handleSell(event);
+  }
+
   const run = async () => {
-    await retry(async () => {
-      friends.on(filter, async (event) => { 
-        await throttledHandleEvent(event);
-        await handleSell(event);
+      await retry(async () => {
+          friends.on(filter, processEvent);
+      }, {
+          retries: 5,
+          minTimeout: 3000,
+          factor: 1
       });
-    }, {
-        retries: 5,
-        minTimeout: 3000,
-        factor: 1
-    });
   };
 
   // Main function execution
@@ -254,7 +251,7 @@ app.listen(port, async () => {
   }
 
   process.on('uncaughtException', handleError);
-  process.on('unhandledRejection', (reason, promise) => {
-      console.error('Unhandled Promise Rejection:', reason);
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Promise Rejection:', reason);
   });
 });
