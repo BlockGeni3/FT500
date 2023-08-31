@@ -168,25 +168,35 @@ app.listen(port, async () => {
   await initBuyPrices();
 
   async function handleSell(event) {
-      const amigo = event.args[1];
-      const bal = await friends.sharesBalance(amigo, wallet.address);
-    
-      if (bal > 0 && purchasedShares.has(amigo)) {
+    const amigo = event.args[1];
+    const bal = await friends.sharesBalance(amigo, wallet.address);
+
+    if (bal > 0 && purchasedShares.has(amigo)) {
         const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
         const buyPrice = buyPricesMap.get(amigo);
-      
+
         if (!buyPrice) return;
-    
+
         // Adjusted the multiplier to 1.6
         if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
+            const currentBalance = await provider.getBalance(wallet.address);
+            
+            // Adjust gas price for selling based on sell price
+            let adjustedGasPrice = cachedGasPrice;
+            if (sellPrice < baseGasPrice) {
+                adjustedGasPrice = (cachedGasPrice * 110) / 100; // 110% of the cached price
+            } else {
+                adjustedGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
+            }
+
             try {
                 const tx = await friends.sellShares(amigo, 1, {
-                    gasPrice: parseInt(finalGasPrice),
+                    gasPrice: parseInt(adjustedGasPrice),
                     nonce: await provider.getTransactionCount(wallet.address, 'pending')
                 });
-        
+
                 purchasedShares.delete(amigo); // Remove address from set after selling
-        
+
                 console.log(`Sold shares of ${amigo} for a profit!`);
             } catch (error) {
                 console.error(`Error selling shares of ${amigo}:`, error.message);
