@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const _ = require('lodash');
 const retry = require('async-retry');
 const express = require('express');
+const { exec } = require('node:child_process')
+
 
 dotenv.config();
 
@@ -17,12 +19,12 @@ app.listen(port, async () => {
   let cachedGasPrice = null;
   let baseGasPrice = null;
   let finalGasPrice;
-
+  let buyCount = 0;
 
   // Constants and Settings
   const MAX_TRADES = 5;
   const MAX_BALANCE_SET_SIZE = 20;
-  const MAX_GAS_PRICE_MULTIPLIER = 1.4;
+  const MAX_GAS_PRICE_MULTIPLIER = 1.6;
   const MIN_GAS_PRICE_MULTIPLIER = 1.1;
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
   const throttledHandleEvent = _.throttle(handleEvent, 1000);
@@ -52,7 +54,7 @@ app.listen(port, async () => {
   let blacklistedAddresses = new Set();
 
   let lastMinedBlockNumber = 0;
-  let currentNonce = await provider.getTransactionCount(wallet.address, 'latest');
+  let currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
 
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
@@ -61,22 +63,6 @@ app.listen(port, async () => {
         cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 200) / 100);
     } else {
         console.error('Unable to get fee data or maxFeePerGas.');
-    }
-  }
-
-  async function waitForBlockConfirmation(blockNumber) {
-    while (lastMinedBlockNumber < blockNumber) {
-      await provider.waitForBlock(lastMinedBlockNumber + 1);
-      lastMinedBlockNumber++;
-    }
-  }
-  
-  async function waitForNewBlock() {
-    const currentBlockNumber = await provider.getBlockNumber();
-    let newBlockNumber = currentBlockNumber;
-    while (newBlockNumber <= currentBlockNumber) {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
-      newBlockNumber = await provider.getBlockNumber();
     }
   }
 
@@ -112,63 +98,82 @@ app.listen(port, async () => {
     const amigo = args[1];
     const weiBalance = await provider.getBalance(amigo);
     const qty = determineQty(weiBalance);
-    const [currentBalance, sellPrice, buyPrice] = await Promise.all([
+    const [currentBalance, sellPrice] = await Promise.all([
         provider.getBalance(wallet.address),
-        friends.getSellPriceAfterFee(amigo, 1),
-        friends.getBuyPriceAfterFee(amigo, qty)
+        friends.getSellPriceAfterFee(amigo, 1)       
     ]);
 
     if (!shouldActOnEvent(event, weiBalance)) return;
 
     finalGasPrice = cachedGasPrice;
-
-    const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
-    finalGasPrice = parseInt(cachedGasPrice * gasMultiplier);
-
-    if ((qty < 2 && buyPrice > 1000000000000000) || buyPrice > 5000000000000000) return;
-
-    if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
-      console.log('Balance hit half way point. Shutting down.');
-      process.exit();
-    }
-
-    if (buyPrice < Number(finalGasPrice)) {
-      console.log('Skipped buying shares as they cost less than the gas fee.');
-      return;
-    }
     if (qty > 0) {
       try {
-          const tx = await friends.buyShares(amigo, qty, {
-              value: buyPrice,
+          const buyPrice = await friends.getBuyPriceAfterFee(amigo, 1)
+          const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
+          finalGasPrice = parseInt(cachedGasPrice * gasMultiplier);
+      
+          if (Number(buyPrice) > 1000000000000000) return;
+      
+          if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
+            console.log('Balance hit half way point. Shutting down.');
+            process.exit();
+          }
+      
+          if (Number(buyPrice) < Number(finalGasPrice)) {
+            console.log('Skipped buying shares as they cost less than the gas fee.');
+            return;
+          }
+
+          const tx = await friends.buyShares(amigo, 1, {
+              value: await friends.getBuyPriceAfterFee(amigo, 1),
               gasPrice: parseInt(finalGasPrice),
               nonce: currentNonce 
           });
-          currentNonce++; 
-          await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
-          buyPricesMap.set(amigo, buyPrice);  
           console.log("--------###BUY###----------");
           console.log({
             qty: qty,
             buyPrice: (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
             sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
-            finalGasPrice: finalGasPrice,
+            finalGasPrice: Number(finalGasPrice),
             currentBalance: currentBalance.toString()
           }); 
           const receipt = await tx.wait();
-          await waitForBlockConfirmation(receipt.blockNumber);
           console.log('Transaction Mined:', receipt.blockNumber);
           console.log("---------------------------");
           purchasedShares.add(amigo);
+          currentNonce++; 
+          buyCount++;
+          checkSaleStatus(buyCount);
+          await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
+          buyPricesMap.set(amigo, buyPrice);  
           return Promise.resolve(amigo);
       } catch (error) {
         if (error.code === -32000 && error.message.includes('already known')) {
           // Handle nonce errors specifically. You might want to increment the nonce or fetch the latest nonce.
-          currentNonce = await provider.getTransactionCount(wallet.address, 'latest');
+          currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
           return Promise.resolve(amigo);
         }
         handleTxError(error);
       }
       return Promise.resolve(null);  
+    }
+  }
+
+  function checkSaleStatus(count) {
+    if(count === 20) {
+      // run sell script
+      exec('nodemon sellOut', (err, output) => {
+        // once the command has completed, the callback function is called
+        if (err) {
+            // log and return if we encounter an error
+            console.error("could not execute command: ", err)
+            return
+        }
+        // log the output received from the command
+        console.log("Output: \n", output)
+      })
+
+      count = 0;
     }
   }
 
@@ -178,11 +183,7 @@ app.listen(port, async () => {
         setTimeout(() => {}, 10000);
     } else {
         let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
-        let blockError = outMessage.includes("not implemented yet") ? "Waiting for next block" : outMessage;
-        if(outMessage.includes('execution reverted: "Insufficient payment"')) {
-          const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
-          cachedGasPrice = parseInt(cachedGasPrice * gasMultiplier);
-        } else if(outMessage.includes("transaction execution reverted")) {
+        let blockError = outMessage.includes("not implemented yet") ? "Waiting for next block" : outMessage;if(outMessage.includes("transaction execution reverted")) {
           console.error('Transaction Failed:', "Reverted, trying again in new block");
         }
         console.error('Transaction Failed:', blockError);
@@ -203,50 +204,6 @@ app.listen(port, async () => {
 
   await initBuyPrices();
 
-  async function handleSell(event) {
-    const amigo = event.args[1];
-    const bal = await friends.sharesBalance(amigo, wallet.address);
-
-    if (bal > 0 && purchasedShares.has(amigo)) {
-        const sellPrice = await friends.getSellPriceAfterFee(amigo, 1);
-        const buyPrice = buyPricesMap.get(amigo);
-
-        if (!buyPrice) return;
-
-        // Adjusted the multiplier to 1.6
-        if (Number(sellPrice) > (1.60 * Number(buyPrice) + finalGasPrice)) {
-            // Adjust gas price for selling based on sell price
-            let adjustedGasPrice = cachedGasPrice;
-            if (sellPrice < baseGasPrice) {
-                adjustedGasPrice = (cachedGasPrice * 110) / 100; // 110% of the cached price
-            } else {
-                adjustedGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
-            }
-
-            try {
-                await waitForNewBlock();
-                
-                const tx = await friends.sellShares(amigo, 1, {
-                  gasPrice: parseInt(adjustedGasPrice),
-                  nonce: await provider.getTransactionCount(wallet.address, 'latest') // Use the managed nonce here
-                });
-
-                purchasedShares.delete(amigo); // Remove address from set after selling
-
-                console.log(`Sold shares of ${amigo} for a profit!`);
-              } catch (error) {
-                if (error.code === -32000 && error.message.includes('already known')) {
-                  // Handle nonce errors specifically. You might want to increment the nonce or fetch the latest nonce.
-                  currentNonce = await provider.getTransactionCount(wallet.address, 'latest');
-                }
-                console.error(`Error selling shares of ${amigo}:`, error.message);
-              }
-        }
-    } else {
-        purchasedShares.delete(amigo);
-    }
-  }
-
   function determineQty(weiBalance) {
     if (weiBalance < 40000000000000000) return 1;
     if (weiBalance < 80000000000000000) return 2;
@@ -256,10 +213,7 @@ app.listen(port, async () => {
 
   async function processEvent(event) {
     try {
-        const amigo = await throttledHandleEvent(event);
-        if (amigo) {
-            await handleSell(event);
-        }
+        await throttledHandleEvent(event);
     } catch (error) {
         console.error(`Error in processEvent: ${error}`);
     }
