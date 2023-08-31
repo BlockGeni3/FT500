@@ -52,7 +52,7 @@ app.listen(port, async () => {
   let blacklistedAddresses = new Set();
 
   let lastMinedBlockNumber = 0;
-  let currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
+  let currentNonce = await provider.getTransactionCount(wallet.address, 'latest');
 
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
