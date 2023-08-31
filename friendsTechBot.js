@@ -286,8 +286,15 @@ app.listen(port, async () => {
           console.error('Rate limit hit. Pausing for a moment...');
           setTimeout(() => {}, 10000); // Actually pause the execution for 10 seconds. The original code didn't pause.
       } else {
-          let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
-          console.error('Error encountered:', outMessage);
+        let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
+        let blockError = outMessage.includes("not implemented yet") ? "Waiting for next block" : outMessage;
+        if(outMessage.includes('execution reverted: "Insufficient payment"')) {
+          const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
+          cachedGasPrice = parseInt(cachedGasPrice * gasMultiplier);
+        } else if(outMessage.includes("transaction execution reverted")) {
+          console.error('Transaction Failed:', "Reverted, trying again in new block");
+        }
+        console.error('Transaction Failed:', blockError);
       }
   }
 
