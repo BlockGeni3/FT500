@@ -53,14 +53,11 @@ app.listen(port, async () => {
   let purchasedShares = new Set();
   let blacklistedAddresses = new Set();
 
-  let lastMinedBlockNumber = 0;
-  let currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
-
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
         baseGasPrice = feeData.maxFeePerGas;
-        cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 200) / 100);
+        cachedGasPrice = parseInt((parseInt(feeData.maxFeePerGas) * 210) / 100);
     } else {
         console.error('Unable to get fee data or maxFeePerGas.');
     }
@@ -127,7 +124,7 @@ app.listen(port, async () => {
           const tx = await friends.buyShares(amigo, 1, {
               value: await friends.getBuyPriceAfterFee(amigo, 1),
               gasPrice: parseInt(finalGasPrice),
-              nonce: currentNonce 
+              nonce: await provider.getTransactionCount(wallet.address, 'pending') 
           });
           console.log("--------###BUY###----------");
           console.log({
@@ -141,7 +138,6 @@ app.listen(port, async () => {
           console.log('Transaction Mined:', receipt.blockNumber);
           console.log("---------------------------");
           purchasedShares.add(amigo);
-          currentNonce++; 
           buyCount++;
           checkSaleStatus(buyCount);
           await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
@@ -149,8 +145,6 @@ app.listen(port, async () => {
           return Promise.resolve(amigo);
       } catch (error) {
         if (error.code === -32000 && error.message.includes('already known')) {
-          // Handle nonce errors specifically. You might want to increment the nonce or fetch the latest nonce.
-          currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
           return Promise.resolve(amigo);
         }
         handleTxError(error);
