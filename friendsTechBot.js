@@ -20,11 +20,11 @@ app.listen(port, async () => {
   const config = {
     MAX_TRADES: 5,
     MAX_BALANCE_SET_SIZE: 20,
-    INITIAL_GAS_MULTIPLIER: 2,
+    INITIAL_GAS_MULTIPLIER: 2.3,
     MIN_BOT_WEI: 95000000000000000,
     MAX_BOT_WEI: 105000000000000000,
-    MIN_SHARE_VAL_WEI: 7000000000000000,
-    MAX_SHARE_VAL_WEI: 10000000000000000,
+    MIN_SHARE_VAL_WEI: 250000000000000,
+    MAX_SHARE_VAL_WEI: 2000000000000000,
     GAS_REFRESH_SECONDS: 5,
     FRIENDTECH_CONTRACT_ADDRESS: '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4',
     EVENT_THROTTLE_TIME_MS: 1000,
@@ -96,15 +96,15 @@ app.listen(port, async () => {
 
     if (qty > 0) {
       try {
-          const feeData = await provider.getFeeData();
-          const gasPrice = parseInt(feeData.maxFeePerGas) * config.INITIAL_GAS_MULTIPLIER;
-      
-          if (Number(buyPriceAfterFee) > config.MAX_SHARE_VAL_WEI) return;
+          if (buyPriceAfterFee > config.MAX_SHARE_VAL_WEI) return;
       
           if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
             console.log('Balance hit half way point. Shutting down.');
             process.exit();
           }
+        
+          const feeData = await provider.getFeeData();
+          const gasPrice = parseInt(feeData.maxFeePerGas) * config.INITIAL_GAS_MULTIPLIER;
       
           if (Number(buyPriceAfterFee) < Number(gasPrice)) {
             console.log('Skipped buying shares as they cost less than the gas fee.');
@@ -112,29 +112,31 @@ app.listen(port, async () => {
           }
 
           const tx = await friends.buyShares(amigo, 1, {
-              value: buyPriceAfterFee,
-              gasPrice: parseInt(gasPrice),
-              nonce: await provider.getTransactionCount(wallet.address, 'pending') 
+            value: buyPriceAfterFee,
+            gasPrice: parseInt(gasPrice),
+            nonce: await provider.getTransactionCount(wallet.address, 'pending'),
           });
-
-          console.log("--------###BUY###----------");
-          console.log({
-            qty: qty,
-            buyPrice: getAsEthString(buyPriceAfterFee),
-            sellPrice: getAsEthString(sellPrice),
-            finalGasPrice: Number(gasPrice),
-            currentBalance: currentBalance.toString()
-          }); 
           const receipt = await tx.wait();
-          console.log('Transaction Mined:', receipt.blockNumber);
-          console.log("---------------------------");
 
-          purchasedShares.add(amigo);
-          buyCount++;
-          checkSaleStatus(buyCount);
+          if(receipt.blockNumber) {
+            console.log("--------###BUY###----------");
+            console.log({
+              qty: qty,
+              buyPrice: getAsEthString(buyPriceAfterFee),
+              sellPrice: getAsEthString(sellPrice),
+              finalGasPrice: Number(gasPrice),
+              currentBalance: currentBalance.toString()
+            }); 
+            console.log('Transaction Mined:', receipt.blockNumber);
+            console.log("---------------------------");
+  
+            purchasedShares.add(amigo);
+            buyCount++;
+            checkSaleStatus(buyCount);
+  
+            await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPriceAfterFee}`);
 
-          await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPriceAfterFee}`);
-
+          }
           return Promise.resolve(amigo);
       } catch (error) {
         if (error.code === -32000 && error.message.includes('already known')) {
