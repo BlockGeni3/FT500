@@ -49,8 +49,6 @@ app.listen(port, async () => {
   const blacklistedAddresses = new Set();
   const halfStartBalance = Number(startBalance) / 2;
 
-  let currentNonce = await provider.getTransactionCount(wallet.address);
-
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
@@ -93,9 +91,8 @@ app.listen(port, async () => {
     const amigo = args[1];
     const weiBalance = await provider.getBalance(amigo);
     const qty = determineQty(weiBalance);
-    const [currentBalance, nonce, sellPrice, buyPrice] = await Promise.all([
+    const [currentBalance, sellPrice, buyPrice] = await Promise.all([
         provider.getBalance(wallet.address),
-        provider.getTransactionCount(wallet.address, 'pending'),
         friends.getSellPriceAfterFee(amigo, 1),
         friends.getBuyPriceAfterFee(amigo, qty)
     ]);
@@ -124,7 +121,7 @@ app.listen(port, async () => {
           const tx = await friends.buyShares(amigo, qty, {
             value: buyPrice,
             gasPrice: parseInt(finalGasPrice),
-            nonce: currentNonce
+            nonce: await provider.getTransactionCount(wallet.address)
           });
           await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
           buyPricesMap.set(amigo, buyPrice);  
@@ -134,8 +131,7 @@ app.listen(port, async () => {
             buyPrice: (Number(buyPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
             sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
             finalGasPrice: finalGasPrice,
-            currentBalance: currentBalance.toString(),
-            nonce: nonce
+            currentBalance: currentBalance.toString()
           });
           const receipt = await tx.wait();
           console.log('Transaction Mined:', receipt.blockNumber);
@@ -196,7 +192,7 @@ app.listen(port, async () => {
             try {
                 const tx = await friends.sellShares(amigo, 1, {
                     gasPrice: parseInt(adjustedGasPrice),
-                    nonce: await provider.getTransactionCount(wallet.address, 'pending')
+                    nonce: await provider.getTransactionCount(wallet.address)
                 });
 
                 purchasedShares.delete(amigo); // Remove address from set after selling
