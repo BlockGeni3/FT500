@@ -2,8 +2,8 @@ const ethers = require('ethers');
 const fs = require('fs');
 require("dotenv").config();
 const express = require('express');
-const port = 5006;
 const _ = require('lodash');
+const  { config }  = require('./config.js')
 
 const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
 const provider = new ethers.JsonRpcProvider(`https://rpc.ankr.com/base`);
@@ -18,7 +18,6 @@ const friends = new ethers.Contract(
     ],
     wallet
 );
-const MIN_PROFIT_MARGIN_PERCENTAGE = 10;
 
 const app = express();
 
@@ -26,7 +25,11 @@ const delay = (duration) => {
     return new Promise(resolve => _.delay(resolve, duration));
 };
 
-app.listen(port, () => {
+const getAsEthString = (wei) => {
+  return (Number(wei) * 0.000000000000000001).toFixed(4).toString() + " ETH"
+}
+
+app.listen(config.SELL_PORT, () => {
     async function txtToArray(filePath) {
         try {
             const data = await fs.promises.readFile(filePath, 'utf8');
@@ -113,7 +116,6 @@ app.listen(port, () => {
                 const trueBuyPrice = (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice));
                 const finalSell = parseInt(realSellPrice);
                 const potentialProfit = finalSell - trueBuyPrice;
-                const profitMarginPercentage = (potentialProfit / trueBuyPrice) * 100;
 
                 await delay(500);  // 0.1-second delay
 
@@ -121,17 +123,17 @@ app.listen(port, () => {
                     console.log(`You don't own share ${friendAddress}, removing`);
                     updatedShares.pop(friend); // Keep this address in the buys.txt since it wasn't sold.
                 }
-                else if (finalSell < trueBuyPrice) {
-                    const loss = ((trueBuyPrice - parseInt(realSellPrice)) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-                    console.log(`Would be selling at a loss for ${loss}, profit margin is below threshold (${MIN_PROFIT_MARGIN_PERCENTAGE}%), skipping`);
+                else if (finalSell <= trueBuyPrice) {
+                    const loss = getAsEthString(trueBuyPrice - realSellPrice);
+                    console.log(`Would be selling at a loss for ${loss},  skipping`);
                     updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
                 } 
                 else { 
                     const newBal = await sellSharesForFriend(friendAddress, {
                         nonce: nonce
                     });
-                    const buyP = (Number(friendShareBoughtForPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
-                    const sellP = (Number(realSellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    const buyP = getAsEthString(friendShareBoughtForPrice);
+                    const sellP = getAsEthString(realSellPrice)
                     console.log(`Shares sold for ${sellP}, bought for ${buyP}, your balance is now ${newBal}`);
                     if (Number(newBal) > 0) {
                         updatedShares.pop(friend); // If some balance remains, then push to updatedSells.
