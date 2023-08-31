@@ -175,7 +175,12 @@ app.listen(port, async () => {
         setTimeout(() => {}, 10000);
     } else {
         let outMessage = error.message.includes("error=") ? error.message.split("error=")[1].split(', {')[0] : error.message;
-        console.error('Transaction Failed:', outMessage);
+        let blockError = outMessage.includes("not implemented yet") ? "Waiting for next block" : outMessage;
+        if(outMessage.includes('execution reverted: "Insufficient payment"')) {
+          const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
+          cachedGasPrice = parseInt(cachedGasPrice * gasMultiplier);
+        }
+        console.error('Transaction Failed:', blockError);
     }
   }
 
