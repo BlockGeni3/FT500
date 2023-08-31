@@ -22,7 +22,7 @@ app.listen(port, async () => {
   // Constants and Settings
   const MAX_TRADES = 5;
   const MAX_BALANCE_SET_SIZE = 20;
-  const MAX_GAS_PRICE_MULTIPLIER = 1.4;
+  const MAX_GAS_PRICE_MULTIPLIER = 1.6;
   const MIN_GAS_PRICE_MULTIPLIER = 1.1;
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
   const throttledHandleEvent = _.throttle(handleEvent, 1000);
