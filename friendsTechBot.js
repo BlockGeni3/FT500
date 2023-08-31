@@ -69,17 +69,17 @@ app.listen(config.PORT, async () => {
   async function handleEvent(event) {
     const { args } = event;
     const amigo = args[1];
-    const weiBalance = await provider.getBalance(amigo);
-    const qty = determineQty(weiBalance);
-    const [currentBalance, sellPrice, buyPriceAfterFee] = await Promise.all([
+    const [currentBalance, sellPrice, buyPriceAfterFee, weiBalance] = await Promise.all([
         provider.getBalance(wallet.address),
         friends.getSellPriceAfterFee(amigo, 1),
-        friends.getBuyPriceAfterFee(amigo, 1)       
+        friends.getBuyPriceAfterFee(amigo, 1),
+        provider.getBalance(amigo)      
     ]);
+    const qty = determineQty(weiBalance);
 
+    console.log('searching 𝆕𝆰𝆕𝆰𝆕𝆰<(^^.)>𝆰𝆕𝆰𝆕𝆰𝆕')
+    
     if (!shouldActOnEvent(event, weiBalance)) return;
-
-    console.log('searching \.<(^^.)>./')
 
     if (qty > 0) {
       try {
@@ -87,19 +87,17 @@ app.listen(config.PORT, async () => {
           if (buyPriceAfterFee < config.MIN_SHARE_VAL_WEI) return;
       
           if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
-            console.log('Balance hit half way point. Shutting down.');
-            exec('nodemon sellOut', (err, output) => {
-              if (err) {
-                  console.error("could not execute command: ", err)
-                  return
-              }
-      
-              console.log("Output: \n", output)
-              process.exit();
-            })
+            console.log('Balance hit half way point. Shutting down. 𝆰<(-_-)>𝆰');
+            process.exit();
           }
+
+          console.log('found something interesting 𝆕𝆰𝆕𝆰𝆕𝆰<(oo,)>𝆰𝆕𝆰𝆕𝆰𝆕')
         
-          const feeData = await provider.getFeeData();
+          const [feeData, getNonce] = await Promise.all([
+            provider.getFeeData(),
+            provider.getTransactionCount(wallet.address, 'pending')
+          ]);
+
           const gasPrice = parseInt(feeData.maxFeePerGas) * config.INITIAL_GAS_MULTIPLIER;
       
           if (Number(buyPriceAfterFee) < Number(gasPrice)) {
@@ -110,28 +108,27 @@ app.listen(config.PORT, async () => {
           const tx = await friends.buyShares(amigo, 1, {
             value: buyPriceAfterFee,
             gasPrice: parseInt(gasPrice),
-            nonce: await provider.getTransactionCount(wallet.address, 'pending'),
+            nonce: getNonce,
           });
           const receipt = await tx.wait();
 
           if(receipt.blockNumber) {
-            console.log("--------###BUY###----------");
-            console.log({
+            const buySignal = {
               qty: qty,
               buyPrice: getAsEthString(buyPriceAfterFee),
               sellPrice: getAsEthString(sellPrice),
-              finalGasPrice: Number(gasPrice),
+              finalGasPrice: getAsEthString(parsEInt(gasPrice)),
               currentBalance: currentBalance.toString()
-            }); 
+            }
+
+            console.log("--------###BUY###----------");
+            console.log(buySignal); 
             console.log('Transaction Mined:', receipt.blockNumber);
             console.log("---------------------------");
   
             purchasedShares.add(amigo);
-            buyCount++;
-            checkSaleStatus(buyCount);
   
             await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPriceAfterFee}`);
-
           }
           return Promise.resolve(amigo);
       } catch (error) {
@@ -145,15 +142,9 @@ app.listen(config.PORT, async () => {
   }
 
   const checkSaleStatus = (count) => {
-    if(count === config.MAX_BALANCE_SET_SIZE) {
-      exec('nodemon sellOut', (err, output) => {
-        if (err) {
-            console.error("could not execute command: ", err)
-            return
-        }
-
-        console.log("Output: \n", output)
-      })
+    if(count === config.MAX_BUYS_BEFORE_SELL) {
+      
+      // sellSharesForFriend(amigo)
 
       count = 0;
     }
