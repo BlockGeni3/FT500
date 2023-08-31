@@ -117,7 +117,7 @@ app.listen(config.PORT, async () => {
               qty: qty,
               buyPrice: getAsEthString(buyPriceAfterFee),
               sellPrice: getAsEthString(sellPrice),
-              finalGasPrice: getAsEthString(parsEInt(gasPrice)),
+              finalGasPrice: getAsEthString(parseInt(gasPrice)),
               currentBalance: currentBalance.toString()
             }
 
