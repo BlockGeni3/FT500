@@ -49,6 +49,8 @@ app.listen(port, async () => {
   const blacklistedAddresses = new Set();
   const halfStartBalance = Number(startBalance) / 2;
 
+  let currentNonce = await provider.getTransactionCount(wallet.address);
+
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
     if (feeData && feeData.maxFeePerGas) {
@@ -122,7 +124,7 @@ app.listen(port, async () => {
           const tx = await friends.buyShares(amigo, qty, {
             value: buyPrice,
             gasPrice: parseInt(finalGasPrice),
-            nonce: nonce
+            nonce: currentNonce
           });
           await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
           buyPricesMap.set(amigo, buyPrice);  
