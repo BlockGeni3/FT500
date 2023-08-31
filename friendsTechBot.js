@@ -1,6 +1,6 @@
 const ethers = require('ethers');
-const fs = require('fs').promises;  // Using promises version of fs for asynchronous operations
-const dotenv = require("dotenv");
+const fs = require('fs').promises;
+const dotenv = require('dotenv');
 const _ = require('lodash');
 const retry = require('async-retry');
 const express = require('express');
@@ -18,6 +18,11 @@ app.listen(port, async () => {
   let cachedGasPrice = null;
   let baseGasPrice = null;
   let finalGasPrice;
+
+  const MAX_TRADES = 5;
+  const MAX_BALANCE_SET_SIZE = 20;
+  const MAX_GAS_PRICE_MULTIPLIER = 1.4;
+  const MIN_GAS_PRICE_MULTIPLIER = 1.1;
 
   const friendsAddress = '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4';
   const throttledHandleEvent = _.throttle(handleEvent, 1000);
@@ -42,6 +47,7 @@ app.listen(port, async () => {
   const balanceSet = new Set();
   const purchasedShares = new Set();
   const blacklistedAddresses = new Set();
+  const halfStartBalance = Number(startBalance) / 2;
 
   async function fetchGasPrice() {
     const feeData = await provider.getFeeData();
@@ -57,14 +63,14 @@ app.listen(port, async () => {
   setInterval(fetchGasPrice, 5 * 1000);
 
   function shouldActOnEvent(event, weiBalance) {
-    const amigo = event.args[1];
+    const { args } = event;
+    const amigo = args[1];
 
     // Check if the address has made too many recent trades, which might indicate bot activity.
-    if (balanceSet.size > 5 && balanceSet.has(weiBalance)) return false;
     if (event.args[2] !== true) return false;
     if (event.args[7] > 1n && (event.args[7] > 4n || event.args[0] !== event.args[1])) return false;
-    if (balanceSet.has(weiBalance)) return false; // using a Set instead of an Array
     if (weiBalance > 95000000000000000 && weiBalance < 105000000000000000) return false;
+    if (balanceSet.size > MAX_TRADES && balanceSet.has(weiBalance)) return false;
     if (weiBalance <= 5000000000000000) {
       const ethBalance = (Number(weiBalance) * 0.000000000000000001).toFixed(4).toString() + " ETH";
       console.log(`They broke dawg::` , amigo, ethBalance);
@@ -75,13 +81,14 @@ app.listen(port, async () => {
     }
     // Store the last 20 balances
     balanceSet.add(weiBalance);
-    if (balanceSet.size > 20) balanceSet.delete([...balanceSet][0]);
+    if (balanceSet.size > MAX_BALANCE_SET_SIZE) balanceSet.delete([...balanceSet][0]);
 
     return true;
   }
 
   async function handleEvent(event) {
-    const amigo = event.args[1];
+    const { args } = event;
+    const amigo = args[1];
     const weiBalance = await provider.getBalance(amigo);
     const qty = determineQty(weiBalance);
     const [currentBalance, nonce, sellPrice, buyPrice] = await Promise.all([
@@ -95,17 +102,13 @@ app.listen(port, async () => {
 
     finalGasPrice = cachedGasPrice;
 
-    // Adjust gas price based on buy price
-    if (buyPrice < baseGasPrice) {
-      finalGasPrice = (cachedGasPrice * 110) / 100; // 110% of the cached price
-    } else {
-      finalGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
-    }
+    const gasMultiplier = buyPrice < baseGasPrice ? MIN_GAS_PRICE_MULTIPLIER : MAX_GAS_PRICE_MULTIPLIER;
+    finalGasPrice = parseInt(cachedGasPrice * gasMultiplier);
 
     if ((qty < 2 && buyPrice > 1000000000000000) || buyPrice > 5000000000000000) return;
 
-    if(currentBalance < startBalance && Number(currentBalance) <= (Number(startBalance) / 2)) {
-      console.log('Balance hit half way point shutting down');
+    if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
+      console.log('Balance hit half way point. Shutting down.');
       process.exit();
     }
 
@@ -152,18 +155,17 @@ app.listen(port, async () => {
     }
   }
 
-  // Initialize buy prices from file
-  async function initBuyPrices() {
-      try {
-          const data = await fs.readFile('./buys.txt', 'utf8');
-          data.split('\n').forEach(line => {
-              const [address, price] = line.split(', ');
-              buyPricesMap.set(address, price);
-          });
-      } catch (e) {
-          console.error('Error reading buys.txt:', e);
-      }
-  }
+  const initBuyPrices = async () => {
+    try {
+      const data = await fs.readFile('./buys.txt', 'utf8');
+      data.split('\n').map(line => {
+        const [address, price] = line.split(', ');
+        buyPricesMap.set(address, price);
+      });
+    } catch (e) {
+      console.error('Error reading buys.txt:', e);
+    }
+  };
 
   await initBuyPrices();
 
