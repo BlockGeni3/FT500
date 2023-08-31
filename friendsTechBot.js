@@ -139,11 +139,11 @@ app.listen(port, async () => {
     if (qty > 0) {
       try {
           const tx = await friends.buyShares(amigo, qty, {
-            value: buyPrice,
-            gasPrice: parseInt(finalGasPrice),
-            nonce: currentNonce // Use the managed nonce here
+              value: buyPrice,
+              gasPrice: parseInt(finalGasPrice),
+              nonce: currentNonce 
           });
-          currentNonce++;  // Increment the nonce after sending transaction
+          currentNonce++; 
           await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPrice}`);
           buyPricesMap.set(amigo, buyPrice);  
           console.log("--------###BUY###----------");
@@ -153,19 +153,22 @@ app.listen(port, async () => {
             sellPrice: (Number(sellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH",
             finalGasPrice: finalGasPrice,
             currentBalance: currentBalance.toString()
-          });
+          }); 
           const receipt = await tx.wait();
           await waitForBlockConfirmation(receipt.blockNumber);
           console.log('Transaction Mined:', receipt.blockNumber);
           console.log("---------------------------");
           purchasedShares.add(amigo);
+          return Promise.resolve(amigo);
       } catch (error) {
         if (error.code === -32000 && error.message.includes('already known')) {
           // Handle nonce errors specifically. You might want to increment the nonce or fetch the latest nonce.
           currentNonce = await provider.getTransactionCount(wallet.address, 'latest');
+          return Promise.resolve(amigo);
         }
         handleTxError(error);
       }
+      return Promise.resolve(null);  
     }
   }
 
@@ -251,8 +254,14 @@ app.listen(port, async () => {
   }
 
   async function processEvent(event) {
-    await throttledHandleEvent(event);
-    await handleSell(event);
+    try {
+        const amigo = await throttledHandleEvent(event);
+        if (amigo) {
+            await handleSell(event);
+        }
+    } catch (error) {
+        console.error(`Error in processEvent: ${error}`);
+    }
   }
 
   async function mainExecution() {
