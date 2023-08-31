@@ -112,16 +112,21 @@ app.listen(port, () => {
                 finalGasPrice = cachedGasPrice;
                 const trueBuyPrice = (parseInt(friendShareBoughtForPrice) + parseInt(finalGasPrice));
                 const finalSell = parseInt(realSellPrice);
+                const potentialProfit = finalSell - trueBuyPrice;
+                const profitMarginPercentage = (potentialProfit / trueBuyPrice) * 100;
 
                 await delay(500);  // 0.1-second delay
 
                 if (Number(bal) === 0) {
                     console.log(`You don't own share ${friendAddress}, removing`);
-                } else if (finalSell < trueBuyPrice) {
+                    updatedShares.pop(friend); // Keep this address in the buys.txt since it wasn't sold.
+                }
+                else if (finalSell < trueBuyPrice) {
                     const loss = ((trueBuyPrice - parseInt(realSellPrice)) * 0.000000000000000001).toFixed(4).toString() + " ETH";
                     console.log(`Would be selling at a loss for ${loss}, profit margin is below threshold (${MIN_PROFIT_MARGIN_PERCENTAGE}%), skipping`);
                     updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
-                } else { 
+                } 
+                else { 
                     const newBal = await sellSharesForFriend(friendAddress, {
                         nonce: nonce
                     });
@@ -133,8 +138,8 @@ app.listen(port, () => {
                     }
                 }
             } else {
-                console.log("Skipped selling shares as they can't be sold (0 value).");
-                updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
+                console.log("Skipped selling shares as they can't be sold (0 value), removing.");
+                updatedShares.pop(friend); // Keep this address in the buys.txt since it wasn't sold.
             }
         } 
         // Update the buys.txt file with the updatedSells array.
