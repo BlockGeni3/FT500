@@ -1,0 +1,18 @@
+
+// Constants and Settings
+module.exports = {
+    config: {
+        MAX_TRADES: 5,
+        MAX_BALANCE_SET_SIZE: 20,
+        INITIAL_GAS_MULTIPLIER: 2.2,
+        MIN_BOT_WEI: 95000000000000000,
+        MAX_BOT_WEI: 105000000000000000,
+        MIN_SHARE_VAL_WEI: 1650000000000000,
+        MAX_SHARE_VAL_WEI: 50000000000000000,
+        GAS_REFRESH_SECONDS: 5,
+        FRIENDTECH_CONTRACT_ADDRESS: '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4',
+        EVENT_THROTTLE_TIME_MS: 1000,
+        RPC_ENDPOINT: `https://rpc.ankr.com/base`,
+        PORT: 5005
+    }
+};

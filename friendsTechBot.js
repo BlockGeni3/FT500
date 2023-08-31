@@ -5,31 +5,16 @@ const _ = require('lodash');
 const retry = require('async-retry');
 const express = require('express');
 const { exec } = require('node:child_process');
+const  { config }  = require('./config.js')
 
 dotenv.config();
 
 const app = express();
-const port = 5005;
 
-app.listen(port, async () => {
-  console.log(`Server started on port ${port}`);
+app.listen(config.PORT, async () => {
+  console.log(`Server started on port ${config.PORT}`);
 
   let buyCount = 0;
-
-  // Constants and Settings
-  const config = {
-    MAX_TRADES: 5,
-    MAX_BALANCE_SET_SIZE: 20,
-    INITIAL_GAS_MULTIPLIER: 2.3,
-    MIN_BOT_WEI: 95000000000000000,
-    MAX_BOT_WEI: 105000000000000000,
-    MIN_SHARE_VAL_WEI: 60000000000000,
-    MAX_SHARE_VAL_WEI: 2000000000000000,
-    GAS_REFRESH_SECONDS: 5,
-    FRIENDTECH_CONTRACT_ADDRESS: '0xCF205808Ed36593aa40a44F10c7f7C2F67d4A4d4',
-    EVENT_THROTTLE_TIME_MS: 1000,
-    RPC_ENDPOINT: `https://rpc.ankr.com/base`
-  }
 
   const friendsAddress = config.FRIENDTECH_CONTRACT_ADDRESS;
   const throttledHandleEvent = _.throttle(handleEvent, config.EVENT_THROTTLE_TIME_MS);
@@ -94,13 +79,24 @@ app.listen(port, async () => {
 
     if (!shouldActOnEvent(event, weiBalance)) return;
 
+    console.log('searching \.<(^^.)>./')
+
     if (qty > 0) {
       try {
           if (buyPriceAfterFee > config.MAX_SHARE_VAL_WEI) return;
+          if (buyPriceAfterFee < config.MIN_SHARE_VAL_WEI) return;
       
           if (currentBalance < startBalance && Number(currentBalance) <= halfStartBalance) {
             console.log('Balance hit half way point. Shutting down.');
-            process.exit();
+            exec('nodemon sellOut', (err, output) => {
+              if (err) {
+                  console.error("could not execute command: ", err)
+                  return
+              }
+      
+              console.log("Output: \n", output)
+              process.exit();
+            })
           }
         
           const feeData = await provider.getFeeData();
