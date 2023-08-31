@@ -218,9 +218,9 @@ app.listen(port, async () => {
             // Adjust gas price for selling based on sell price
             let adjustedGasPrice = cachedGasPrice;
             if (sellPrice < baseGasPrice) {
-                adjustedGasPrice = (cachedGasPrice * 110) / 100; // 110% of the cached price
+                adjustedGasPrice = cachedGasPrice * MIN_GAS_PRICE_MULTIPLIER; // 110% of the cached price
             } else {
-                adjustedGasPrice = (cachedGasPrice * 140) / 100; // 140% of the cached price
+                adjustedGasPrice = cachedGasPrice * MAX_GAS_PRICE_MULTIPLIER; // 140% of the cached price
             }
 
             try {
