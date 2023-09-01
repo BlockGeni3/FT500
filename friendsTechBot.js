@@ -108,7 +108,6 @@ app.listen(config.PORT, async () => {
           const tx = await friends.buyShares(amigo, 1, {
             value: buyPriceAfterFee,
             gasPrice: parseInt(gasPrice),
-            nonce: getNonce,
           });
           const receipt = await tx.wait();
 
@@ -117,6 +116,7 @@ app.listen(config.PORT, async () => {
               qty: qty,
               buyPrice: getAsEthString(buyPriceAfterFee),
               sellPrice: getAsEthString(sellPrice),
+              gasLimit: config.GAS_LIMIT,
               finalGasPrice: getAsEthString(parseInt(gasPrice)),
               currentBalance: currentBalance.toString()
             }
@@ -129,6 +129,32 @@ app.listen(config.PORT, async () => {
             purchasedShares.add(amigo);
   
             await fs.appendFile('./buys.txt', `\n${amigo}, ${buyPriceAfterFee}`);
+
+            setTimeout(() => {}, 500);
+
+            // Calculate the value of shares to sell
+            const sellValue = await friends.getSellPriceAfterFee(amigo, 1);
+
+            if (sellValue > buyPriceAfterFee) {
+              if (sellValue > 0) {
+                const tx = await friends.sellShares(amigo, 1, {
+                  gasPrice: parseInt(gasPrice),
+                });
+                const receipt = await tx.wait();
+                
+                if (receipt.blockNumber) {
+                  // Update state and log information as needed
+                  console.log("--------###SELL###----------");
+                  console.log("Shares Sold:", 1, "Profit: "+getAsEthString(sellValue - buyPriceAfterFee));
+                  console.log('Transaction Mined:', receipt.blockNumber);
+                  console.log("---------------------------");
+                  
+                  purchasedShares.delete(amigo);
+                  
+                  await fs.appendFile('./sells.txt', `\n${amigo}, ${sellValue}`);
+                }
+              }
+            }
           }
           return Promise.resolve(amigo);
       } catch (error) {
@@ -138,15 +164,6 @@ app.listen(config.PORT, async () => {
         handleError(error);
       }
       return Promise.resolve(null);  
-    }
-  }
-
-  const checkSaleStatus = (count) => {
-    if(count === config.MAX_BUYS_BEFORE_SELL) {
-      
-      // sellSharesForFriend(amigo)
-
-      count = 0;
     }
   }
 

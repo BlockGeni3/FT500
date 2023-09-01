@@ -25,10 +25,6 @@ const delay = (duration) => {
     return new Promise(resolve => _.delay(resolve, duration));
 };
 
-const getAsEthString = (wei) => {
-  return (Number(wei) * 0.000000000000000001).toFixed(4).toString() + " ETH"
-}
-
 app.listen(config.SELL_PORT, () => {
     async function txtToArray(filePath) {
         try {
@@ -90,7 +86,7 @@ app.listen(config.SELL_PORT, () => {
         if (bal > 0 && supply > bal && supply != 0 && friend !== '0x1a310A95F2350d80471d298f54571aD214C2e157') {
             console.log(`Selling ${bal} for: ${friend}`);
             try {
-                const tx = await friends.sellShares(friend, bal, { gasPrice: parseInt(finalGasPrice) });
+                const tx = await friends.sellShares(friend, bal, { gasLimit: config.GAS_LIMIT, gasPrice: parseInt(finalGasPrice) });
                 const receipt = await tx.wait();
                 console.log(`Transaction Mined for ${friend}:`, receipt.blockNumber);
             } catch (error) {
@@ -123,17 +119,18 @@ app.listen(config.SELL_PORT, () => {
                     console.log(`You don't own share ${friendAddress}, removing`);
                     updatedShares.pop(friend); // Keep this address in the buys.txt since it wasn't sold.
                 }
-                else if (finalSell <= trueBuyPrice) {
-                    const loss = getAsEthString(trueBuyPrice - realSellPrice);
+                else if (parseInt(finalSell) <= parseInt(trueBuyPrice)) {
+                    const loss = ((trueBuyPrice - parseInt(realSellPrice)) * 0.000000000000000001).toFixed(4).toString() + " ETH";
                     console.log(`Would be selling at a loss for ${loss},  skipping`);
                     updatedShares.push(friend); // Keep this address in the buys.txt since it wasn't sold.
                 } 
                 else { 
                     const newBal = await sellSharesForFriend(friendAddress, {
-                        nonce: nonce
+                        nonce: nonce,
+                        gasPrice: cachedGasPrice
                     });
-                    const buyP = getAsEthString(friendShareBoughtForPrice);
-                    const sellP = getAsEthString(realSellPrice)
+                    const buyP = (Number(friendShareBoughtForPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
+                    const sellP = (Number(realSellPrice) * 0.000000000000000001).toFixed(4).toString() + " ETH";
                     console.log(`Shares sold for ${sellP}, bought for ${buyP}, your balance is now ${newBal}`);
                     if (Number(newBal) > 0) {
                         updatedShares.pop(friend); // If some balance remains, then push to updatedSells.
