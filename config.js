@@ -11,7 +11,7 @@ const config = {
     GAS_LIMIT: 300000,
 
     // Change this to target share value
-    MIN_SHARE_VAL_WEI: 560000000000000,
+    MIN_SHARE_VAL_WEI: 250000000000000,
     MAX_SHARE_VAL_WEI: 1000000000000000,
 
     PORT: 5005,
